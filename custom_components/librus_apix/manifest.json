@@ -1,13 +1,13 @@
 {
   "domain": "librus_apix",
-  "name": "Librus APIX Integration",
-  "codeowners": ["@librus-user"],
+  "name": "Librus Synergia HA",
+  "codeowners": ["@LukMaverick"],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/librus-user/librus-ha-integration",
+  "documentation": "https://github.com/LukMaverick/LibrusSynergiaHA",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/librus-user/librus-ha-integration/issues",
+  "issue_tracker": "https://github.com/LukMaverick/LibrusSynergiaHA/issues",
   "requirements": ["librus-apix", "aiohttp"],
-  "version": "1.0.0"
+  "version": "0.1.0"
 }

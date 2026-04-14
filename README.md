@@ -28,9 +28,10 @@ Integracja tworzy następujące sensory:
 1. Otwórz HACS w Home Assistant
 2. Idź do "Integrations"  
 3. Kliknij "+" i wybierz "Custom repositories"
-4. Dodaj: `https://github.com/twoje-username/librus-ha-integration`
-5. Zainstaluj "Librus APIX Integration"
-6. Restartuj Home Assistant
+4. Dodaj: `https://github.com/LukMaverick/LibrusSynergiaHA`
+5. Wybierz kategorię "Integration" 
+6. Zainstaluj "Librus Synergia HA"
+7. Restartuj Home Assistant
 
 ### Opcja 2: Instalacja manualna
 
