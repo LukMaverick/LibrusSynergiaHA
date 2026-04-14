@@ -228,6 +228,10 @@ MIT License - patrz [LICENSE](LICENSE)
 
 Pull requesty są mile widziane! Sprawdź [CONTRIBUTING.md](CONTRIBUTING.md)
 
+### 🙏 Podziękowania
+
+Specjalne podziękowania dla **KB** za wsparcie i pomoc w rozwoju projektu.
+
 ## 👨‍💻 Autor
 
 Stworzono na bazie biblioteki [librus-apix](https://github.com/RustySnek/librus-apix)
