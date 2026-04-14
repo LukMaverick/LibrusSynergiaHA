@@ -111,24 +111,57 @@ severity:
   red: 3
 ```
 
-## 🔔 Przykładowe automatyzacje
+## 🔔 Automatyzacje powiadomień na telefon
 
-### Powiadomienie o nowej ocenie
+Integracja wysyła zdarzenia Home Assistant gdy pojawi się nowa wiadomość lub ocena.
+Zdarzenia są wykrywane przy każdym odświeżeniu (co 2h). Pierwsze uruchomienie tylko zapamiętuje stan — **nie wysyła duplikatów**.
+
+> **Test bez czekania:** Idź do **Developer Tools → Events**, Event type: `librus_apix_nowa_wiadomosc`, Event data jak poniżej i kliknij **Fire Event**.
+
+### 📬 Powiadomienie o nowej wiadomości
+
+Zdarzenie: `librus_apix_nowa_wiadomosc`  
+Dostępne dane: `nadawca`, `temat`, `tresc`, `data`, `ma_zalacznik`
+
 ```yaml
 automation:
-  - alias: "Nowa ocena w Librus"
+  - alias: "Librus - nowa wiadomosc"
     trigger:
-      platform: state
-      entity_id: sensor.librus_latest_grade
-    condition:
-      - condition: template
-        value_template: "{{ trigger.to_state.state != trigger.from_state.state }}"
+      platform: event
+      event_type: librus_apix_nowa_wiadomosc
     action:
-      - service: notify.mobile_app_your_phone
+      - service: notify.mobile_app_NAZWA_TWOJEGO_TELEFONU
         data:
-          title: "🎓 Nowa ocena!"
-          message: "{{ trigger.to_state.state }}"
+          title: "📬 Librus: nowa wiadomość"
+          message: >-
+            Od: {{ trigger.event.data.nadawca }}
+            Temat: {{ trigger.event.data.temat }}
+            {{ trigger.event.data.tresc }}
 ```
+
+### 📝 Powiadomienie o nowej ocenie
+
+Zdarzenie: `librus_apix_nowa_ocena`  
+Dostępne dane: `przedmiot`, `ocena`, `data`, `kategoria`, `nauczyciel`
+
+```yaml
+automation:
+  - alias: "Librus - nowa ocena"
+    trigger:
+      platform: event
+      event_type: librus_apix_nowa_ocena
+    action:
+      - service: notify.mobile_app_NAZWA_TWOJEGO_TELEFONU
+        data:
+          title: "🎓 Librus: nowa ocena {{ trigger.event.data.ocena }}"
+          message: >-
+            {{ trigger.event.data.przedmiot }}
+            Ocena: {{ trigger.event.data.ocena }}
+            Kategoria: {{ trigger.event.data.kategoria }}
+            Nauczyciel: {{ trigger.event.data.nauczyciel }}
+```
+
+> **Gdzie znaleźć nazwę telefonu?** HA → Settings → Devices & Services → Mobile App → nazwa urządzenia (np. `notify.mobile_app_samsung_galaxy_s24`)
 
 ## 🛠️ Rozwój
 
