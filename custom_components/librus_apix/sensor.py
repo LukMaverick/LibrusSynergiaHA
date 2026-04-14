@@ -155,7 +155,7 @@ class LibrusUczenSensor(CoordinatorEntity, SensorEntity):
         """Inicjalizacja."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Librus - Informacje o uczniu"
+        self._attr_name = "Informacje o uczniu"
         self._attr_unique_id = f"{config_entry.entry_id}_uczen"
         self._attr_icon = "mdi:account-school"
 
@@ -189,7 +189,7 @@ class LibrusSzczesliwyNumerekSensor(CoordinatorEntity, SensorEntity):
         """Inicjalizacja."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Librus - Szczesliwy numerek"
+        self._attr_name = "Szczesliwy numerek"
         self._attr_unique_id = f"{config_entry.entry_id}_szczesliwy_numerek"
         self._attr_icon = "mdi:numeric"
 
@@ -210,7 +210,7 @@ class LibrusOcenySensor(CoordinatorEntity, SensorEntity):
         """Inicjalizacja."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Librus - Oceny"
+        self._attr_name = "Oceny"
         self._attr_unique_id = f"{config_entry.entry_id}_oceny"
         self._attr_icon = "mdi:school"
 
@@ -252,7 +252,7 @@ class LibrusPrzedmiotSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry
         self._subject = subject
         safe_name = subject.lower().replace(" ", "_").replace("/", "_")
-        self._attr_name = f"Librus - {subject}"
+        self._attr_name = subject
         self._attr_unique_id = f"{config_entry.entry_id}_przedmiot_{safe_name}"
         self._attr_icon = "mdi:book-open-variant"
 
@@ -261,9 +261,11 @@ class LibrusPrzedmiotSensor(CoordinatorEntity, SensorEntity):
         return _device_info(self.coordinator, self._config_entry)
 
     @property
-    def native_value(self) -> int:
+    def native_value(self) -> Optional[str]:
         oceny = (self.coordinator.data or {}).get("oceny_wg_przedmiotu", {}).get(self._subject, [])
-        return len(oceny)
+        if not oceny:
+            return None
+        return ", ".join(g["ocena"] for g in oceny)
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
@@ -302,7 +304,7 @@ class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
         """Inicjalizacja."""
         super().__init__(coordinator)
         self._config_entry = config_entry
-        self._attr_name = "Librus - Wiadomosci"
+        self._attr_name = "Wiadomosci"
         self._attr_unique_id = f"{config_entry.entry_id}_wiadomosci"
         self._attr_icon = "mdi:message-text"
 
@@ -318,7 +320,7 @@ class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
-        msgs = (self.coordinator.data or {}).get("wiadomosci", [])
+        msgs = (self.coordinator.data or {}).get("wiadomosci", [])[:5]
         return {
             "wiadomosci": [
                 {
