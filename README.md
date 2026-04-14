@@ -25,13 +25,24 @@ Integracja tworzy następujące sensory:
 
 ### Opcja 1: HACS (Zalecana)
 
+Kliknij poniższy przycisk, aby automatycznie dodać repozytorium do HACS z właściwą kategorią:
+
+[![Otwórz w HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=LukMaverick&repository=LibrusSynergiaHA&category=integration)
+
+Lub ręcznie:
+
 1. Otwórz HACS w Home Assistant
-2. Idź do "Integrations"  
-3. Kliknij "+" i wybierz "Custom repositories"
-4. Dodaj: `https://github.com/LukMaverick/LibrusSynergiaHA`
-5. Wybierz kategorię "Integration" 
-6. Zainstaluj "Librus Synergia HA"
-7. Restartuj Home Assistant
+2. Kliknij trzy kropki (⋮) w prawym górnym rogu
+3. Wybierz **"Custom repositories"**
+4. W polu URL wpisz dokładnie: `https://github.com/LukMaverick/LibrusSynergiaHA`  
+   ⚠️ **Bez `.git` na końcu!**
+5. W polu **Category** wybierz: **`Integration`**  
+   ⚠️ **NIE wybieraj "AppDaemon", "Plugin" ani żadnej innej opcji!**
+6. Kliknij **ADD**
+7. Znajdź **"Librus Synergia HA"** na liście i zainstaluj
+8. Restartuj Home Assistant
+
+> **Uwaga:** Błąd *"is not a valid app repository"* pojawia się, gdy w kroku 5 zostanie wybrana nieprawidłowa kategoria (np. "AppDaemon"). Upewnij się, że wybrano **Integration**.
 
 ### Opcja 2: Instalacja manualna
 
