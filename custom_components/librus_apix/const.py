@@ -10,7 +10,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
 # Update intervals
-SCAN_INTERVAL = timedelta(hours=1)
+SCAN_INTERVAL = timedelta(hours=2)
 MESSAGE_SCAN_INTERVAL = timedelta(minutes=30)
 
 # Sensor types
