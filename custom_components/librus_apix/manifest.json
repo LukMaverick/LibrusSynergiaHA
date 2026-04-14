@@ -1,0 +1,13 @@
+{
+  "domain": "librus_apix",
+  "name": "Librus APIX Integration",
+  "codeowners": ["@librus-user"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/librus-user/librus-ha-integration",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/librus-user/librus-ha-integration/issues",
+  "requirements": ["librus-apix", "aiohttp"],
+  "version": "1.0.0"
+}

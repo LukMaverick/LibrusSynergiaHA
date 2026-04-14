@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  homeassistant:
+    image: homeassistant/home-assistant:latest
+    container_name: librus-ha-test
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Warsaw
+    volumes:
+      - ./config:/config
+      - ./custom_components:/config/custom_components:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8123:8123"
+    privileged: true
+    
+  # Optional: Code Server for editing files
+  code-server:
+    image: codercom/code-server:latest
+    container_name: librus-code-server
+    restart: unless-stopped
+    environment:
+      - PASSWORD=homeassistant
+    volumes:
+      - ./:/home/coder/project
+    ports:
+      - "8443:8080"
+
+networks:
+  default:
+    name: librus-ha-network

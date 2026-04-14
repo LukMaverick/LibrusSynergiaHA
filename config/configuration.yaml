@@ -1,0 +1,79 @@
+# Basic configuration for testing Librus APIX integration
+
+default_config:
+
+# Logger configuration for debugging
+logger:
+  default: info
+  logs:
+    custom_components.librus_apix: debug
+    librus_apix: debug
+
+# Frontend themes
+frontend:
+  themes: !include_dir_merge_named themes
+
+# Example automation for grade notifications
+automation:
+  - alias: "New Grade Notification"
+    trigger:
+      - platform: state
+        entity_id: sensor.librus_latest_grade
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state != trigger.from_state.state }}"
+      - condition: template
+        value_template: "{{ trigger.to_state.state != 'No grades' }}"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "Nowa ocena w Librus!"
+          message: "{{ trigger.to_state.state }} - {{ trigger.to_state.attributes.date }}"
+          notification_id: "new_grade"
+
+  - alias: "New Message Notification"
+    trigger:
+      - platform: state
+        entity_id: sensor.librus_latest_message
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state != trigger.from_state.state }}"
+      - condition: template
+        value_template: "{{ trigger.to_state.state != 'No messages' }}"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "Nowa wiadomość w Librus!"
+          message: "{{ trigger.to_state.state }}"
+          notification_id: "new_message"
+
+# Example sensor for grade average tracking
+sensor:
+  - platform: template
+    sensors:
+      librus_grade_trend:
+        friendly_name: "Grade Trend"
+        value_template: >-
+          {% set avg = states('sensor.librus_average_grade') | float %}
+          {% if avg >= 5.0 %}
+            Excellent
+          {% elif avg >= 4.5 %}
+            Very Good
+          {% elif avg >= 4.0 %}
+            Good
+          {% elif avg >= 3.5 %}
+            Satisfactory
+          {% else %}
+            Needs Improvement
+          {% endif %}
+        icon_template: >-
+          {% set avg = states('sensor.librus_average_grade') | float %}
+          {% if avg >= 5.0 %}
+            mdi:trophy
+          {% elif avg >= 4.5 %}
+            mdi:medal
+          {% elif avg >= 4.0 %}
+            mdi:thumb-up
+          {% else %}
+            mdi:alert-circle
+          {% endif %}

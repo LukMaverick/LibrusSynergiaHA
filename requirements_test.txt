@@ -1,0 +1,22 @@
+# Requirements for testing Librus APIX integration
+
+# Home Assistant testing
+homeassistant>=2023.1.0
+pytest>=7.0.0
+pytest-homeassistant-custom-component>=0.13.0
+pytest-asyncio>=0.20.0
+
+# Librus APIX library
+librus-apix
+aiohttp>=3.8.0
+
+# Development tools
+black>=22.0.0
+flake8>=4.0.0
+isort>=5.10.0
+mypy>=0.940
+pre-commit>=2.15.0
+
+# Documentation
+sphinx>=4.0.0
+sphinx-rtd-theme>=1.0.0
