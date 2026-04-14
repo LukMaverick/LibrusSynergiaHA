@@ -4,7 +4,7 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -79,6 +79,10 @@ async def async_setup_entry(
     # Tworz czujniki per przedmiot na podstawie pierwszego pobrania danych
     for subject in coordinator.data.get("oceny_wg_przedmiotu", {}).keys():
         entities.append(LibrusPrzedmiotSensor(coordinator, subject, config_entry))
+        entities.append(LibrusSredniaPrzedmiotuSensor(coordinator, subject, config_entry))
+
+    # Czujnik globalnej sredniej
+    entities.append(LibrusSredniaOcenSensor(coordinator, config_entry))
 
     async_add_entities(entities)
 
@@ -315,6 +319,7 @@ class LibrusOcenySensor(CoordinatorEntity, SensorEntity):
         )
         return {
             "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
+            "liczba_ocen": len((self.coordinator.data or {}).get("oceny", [])),
             "liczba_przedmiotow": len(oceny_wg_przedmiotu),
             "sa_nowe_oceny": sa_nowe,
             "semestr": data.get("semestr_biezacy"),
@@ -374,9 +379,90 @@ class LibrusPrzedmiotSensor(CoordinatorEntity, SensorEntity):
 
         return {
             "oceny": oceny,
+            "lista_ocen": ", ".join(g["ocena"] for g in oceny),
             "srednia": srednia,
             "najnowsza_ocena": najnowsza,
             "sa_nowe_oceny": any(g["jest_nowa"] for g in oceny),
+        }
+
+
+class LibrusSredniaOcenSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik ze srednia wszystkich ocen biezacego semestru (do wykresu)."""
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_name = "Srednia ocen"
+        self._attr_unique_id = f"{config_entry.entry_id}_srednia_ocen"
+        self._attr_icon = "mdi:chart-line"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = None
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        return _device_info(self.coordinator, self._config_entry)
+
+    @property
+    def native_value(self) -> Optional[float]:
+        data = self.coordinator.data or {}
+        wszystkie = [
+            g
+            for oceny in data.get("oceny_wg_przedmiotu", {}).values()
+            for g in oceny
+        ]
+        return _srednia_ocen(wszystkie)
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        data = self.coordinator.data or {}
+        srednie_przedmiotow = {
+            subject: _srednia_ocen(oceny)
+            for subject, oceny in data.get("oceny_wg_przedmiotu", {}).items()
+            if _srednia_ocen(oceny) is not None
+        }
+        return {
+            "srednie_wg_przedmiotow": srednie_przedmiotow,
+            "semestr": data.get("semestr_biezacy"),
+        }
+
+
+class LibrusSredniaPrzedmiotuSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik ze srednia ocen dla konkretnego przedmiotu (do wykresu)."""
+
+    def __init__(
+        self,
+        coordinator: LibrusDataUpdateCoordinator,
+        subject: str,
+        config_entry: ConfigEntry,
+    ) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._subject = subject
+        safe_name = subject.lower().replace(" ", "_").replace("/", "_")
+        self._attr_name = f"Srednia {subject}"
+        self._attr_unique_id = f"{config_entry.entry_id}_srednia_{safe_name}"
+        self._attr_icon = "mdi:chart-bar"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_native_unit_of_measurement = None
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        return _device_info(self.coordinator, self._config_entry)
+
+    @property
+    def native_value(self) -> Optional[float]:
+        oceny = (self.coordinator.data or {}).get("oceny_wg_przedmiotu", {}).get(self._subject, [])
+        return _srednia_ocen(oceny)
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        oceny = (self.coordinator.data or {}).get("oceny_wg_przedmiotu", {}).get(self._subject, [])
+        return {
+            "przedmiot": self._subject,
+            "lista_ocen": ", ".join(g["ocena"] for g in oceny),
+            "liczba_ocen": len(oceny),
         }
 
 

@@ -14,11 +14,17 @@ Integracja Home Assistant z systemem Librus Synergia, umożliwiająca monitorowa
 
 Integracja tworzy następujące sensory:
 
-- `sensor.librus_uczen` - Informacje o uczniu (klasa, wychowawca, szkoła)
-- `sensor.librus_szczesliwy_numerek` - Szczęśliwy numerek dnia
-- `sensor.librus_oceny` - Wszystkie oceny bieżącego semestru pogrupowane wg przedmiotów
-- `sensor.librus_wiadomosci` - Ostatnie 5 wiadomości z pełną treścią
-- `sensor.librus_<przedmiot>` - Osobny sensor dla każdego przedmiotu (np. `sensor.librus_matematyka`)
+| Sensor | Opis | Wartość |
+|--------|------|---------|
+| `sensor.librus_uczen` | Informacje o uczniu (klasa, wychowawca, szkoła) | imię i nazwisko |
+| `sensor.librus_szczesliwy_numerek` | Szczęśliwy numerek dnia | numer |
+| `sensor.librus_oceny` | Wszystkie oceny bieżącego semestru | liczba ocen |
+| `sensor.librus_srednia_ocen` | **Globalna średnia** ze wszystkich przedmiotów | float (wykres 📈) |
+| `sensor.librus_wiadomosci` | Ostatnie 5 wiadomości z pełną treścią | liczba nieprzeczytanych |
+| `sensor.librus_<przedmiot>` | Oceny z danego przedmiotu (np. `sensor.librus_matematyka`) | lista ocen: "4, 3+, 5" |
+| `sensor.librus_srednia_<przedmiot>` | **Średnia** z danego przedmiotu (np. `sensor.librus_srednia_matematyka`) | float (wykres 📈) |
+
+Sensory średnich mają `state_class: measurement` — HA automatycznie rysuje dla nich wykres historyczny po kliknięciu w encję.
 
 ## 📦 Instalacja
 
@@ -73,11 +79,13 @@ docker-compose up -d
 
 ## 📊 Przykładowe karty Lovelace
 
-### Karta ocen
+### Karta ocen i średnich
 ```yaml
 type: entities
 title: "📚 Oceny Librus"
 entities:
+  - entity: sensor.librus_srednia_ocen
+    name: "Globalna średnia"
   - entity: sensor.librus_oceny
     name: "Liczba ocen"
   - entity: sensor.librus_szczesliwy_numerek
@@ -91,6 +99,19 @@ title: "📧 Wiadomości Librus"
 entities:
   - entity: sensor.librus_wiadomosci
     name: "Nieprzeczytane wiadomości"
+```
+
+### Wykres średniej z przedmiotu (Gauge)
+```yaml
+type: gauge
+entity: sensor.librus_srednia_matematyka
+name: "Matematyka - średnia"
+min: 1
+max: 6
+severity:
+  green: 4.5
+  yellow: 3
+  red: 0
 ```
 
 ## 🔔 Automatyzacje powiadomień na telefon
