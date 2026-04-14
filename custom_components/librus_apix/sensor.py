@@ -83,12 +83,19 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
+EVENT_NOWA_WIADOMOSC = f"{DOMAIN}_nowa_wiadomosc"
+EVENT_NOWA_OCENA = f"{DOMAIN}_nowa_ocena"
+
+
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
     """Klasa zarzadzajaca pobieraniem danych z Librus."""
 
     def __init__(self, hass: HomeAssistant, client: Any) -> None:
         """Inicjalizacja koordynatora."""
         self.client = client
+        self._seen_message_hrefs: set = set()
+        self._seen_grade_ids: set = set()
+        self._first_run: bool = True
         super().__init__(
             hass,
             _LOGGER,
@@ -138,18 +145,68 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     "jest_nowa": _jest_nowa(grade["date"]),
                 })
 
-            return {
+            wiadomosci = self._build_wiadomosci(messages)
+
+            result = {
                 "student_info": student_info,
                 "oceny": grades,
                 "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
-                "wiadomosci": self._build_wiadomosci(messages),
+                "wiadomosci": wiadomosci,
                 "semestr_biezacy": current_sem,
             }
+
+            # Pierwsze pobranie - tylko zapamietaj stan, nie wysylaj powiadomien
+            if self._first_run:
+                self._first_run = False
+                for msg in wiadomosci:
+                    self._seen_message_hrefs.add(msg["href"])
+                for grade in grades:
+                    self._seen_grade_ids.add(
+                        (grade["subject"], grade["date"], grade["grade"])
+                    )
+            else:
+                self._fire_events(wiadomosci, grades)
+
+            return result
 
         except UpdateFailed:
             raise
         except Exception as err:
             raise UpdateFailed(f"Blad komunikacji z API: {err}") from err
+
+    def _fire_events(self, messages: List[Dict], grades: List[Dict]) -> None:
+        """Wyslij zdarzenia HA dla nowych wiadomosci i ocen."""
+        for msg in messages:
+            href = msg.get("href", "")
+            if href and href not in self._seen_message_hrefs:
+                self._seen_message_hrefs.add(href)
+                _LOGGER.debug("Nowa wiadomosc: %s", msg.get("title"))
+                self.hass.bus.fire(
+                    EVENT_NOWA_WIADOMOSC,
+                    {
+                        "nadawca": msg.get("author", ""),
+                        "temat": msg.get("title", ""),
+                        "data": msg.get("date", ""),
+                        "tresc": msg.get("content", "")[:500],
+                        "ma_zalacznik": msg.get("has_attachment", False),
+                    },
+                )
+
+        for grade in grades:
+            grade_id = (grade["subject"], grade["date"], grade["grade"])
+            if grade_id not in self._seen_grade_ids:
+                self._seen_grade_ids.add(grade_id)
+                _LOGGER.debug("Nowa ocena: %s %s", grade["subject"], grade["grade"])
+                self.hass.bus.fire(
+                    EVENT_NOWA_OCENA,
+                    {
+                        "przedmiot": grade["subject"],
+                        "ocena": grade["grade"],
+                        "data": grade["date"],
+                        "kategoria": grade["category"],
+                        "nauczyciel": grade["teacher"],
+                    },
+                )
 
     def _build_wiadomosci(self, messages: Optional[List[Dict]]) -> List[Dict]:
         """Oznacz nowe wiadomosci i zwroc liste."""
