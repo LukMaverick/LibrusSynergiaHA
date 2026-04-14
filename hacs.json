@@ -1,11 +1,6 @@
 {
   "name": "Librus Synergia HA",
-  "content_in_root": false,
-  "filename": "librus_apix",
-  "country": ["PL"],
   "hacs": "1.6.0",
-  "domains": ["librus_apix"],
-  "iot_class": "Cloud Polling",
   "homeassistant": "2023.1.0",
-  "render_readme": true
+  "country": "PL"
 }
