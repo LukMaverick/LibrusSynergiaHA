@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import traceback
+from datetime import date
 from typing import Dict, Any
 
 import voluptuous as vol
@@ -17,6 +18,17 @@ from librus_apix.client import Client, new_client
 from .const import DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _current_semester() -> int:
+    """Zwroc numer biezacego semestru (1 lub 2) wg polskiego roku szkolnego.
+
+    Semestr 1: wrzesien (9) - styczen (1)
+    Semestr 2: luty (2) - czerwiec (6)
+    Lipiec-sierpien to wakacje - zwracamy 2 (ostatni semestr roku).
+    """
+    m = date.today().month
+    return 1 if m >= 9 else 2
 
 PLATFORMS = ["sensor"]
 
@@ -78,26 +90,34 @@ class LibrusApiClient:
                     None, get_grades, self._client, "all"
                 )
 
+                current_sem = _current_semester()
+                _LOGGER.debug("Filtrowanie ocen dla semestru %d", current_sem)
+
                 # Process all grades
                 all_grades = []
 
-                # Process numeric grades
+                # Process numeric grades (only current semester)
                 for subject_grades in numeric_grades:
                     for subject, grades_list in subject_grades.items():
                         for grade in grades_list:
+                            if grade.semester != current_sem:
+                                continue
                             all_grades.append({
                                 'subject': subject,
                                 'grade': grade.grade,
                                 'date': grade.date,
                                 'category': grade.category,
                                 'teacher': getattr(grade, 'teacher', ''),
+                                'semester': grade.semester,
                                 'type': 'numeric'
                             })
 
-                # Process descriptive grades (many are actually numeric)
+                # Process descriptive grades (only current semester, many are actually numeric)
                 for subject_grades in descriptive_grades:
                     for subject, grades_list in subject_grades.items():
                         for desc_grade in grades_list:
+                            if desc_grade.semester != current_sem:
+                                continue
                             grade_val = desc_grade.grade.strip()
                             if grade_val and (grade_val.replace('+', '').replace('-', '').isdigit() or
                                             grade_val in ['1', '2', '3', '4', '5', '6', '1+', '1-', '2+', '2-',
@@ -108,6 +128,7 @@ class LibrusApiClient:
                                     'date': desc_grade.date,
                                     'category': getattr(desc_grade, 'desc', '').split('\n')[0] if hasattr(desc_grade, 'desc') else '',
                                     'teacher': getattr(desc_grade, 'teacher', ''),
+                                    'semester': desc_grade.semester,
                                     'type': 'descriptive'
                                 })
 

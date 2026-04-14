@@ -98,6 +98,9 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> Dict[str, Any]:
         """Pobierz aktualne dane z API Librus."""
+        from datetime import date as _date
+        current_sem = 1 if _date.today().month >= 9 else 2
+
         try:
             student_info = await self.client.async_get_student_information()
             grades = await self.client.async_get_grades()
@@ -131,6 +134,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     "data": grade["date"],
                     "kategoria": grade["category"],
                     "nauczyciel": grade["teacher"],
+                    "semestr": grade.get("semester"),
                     "jest_nowa": _jest_nowa(grade["date"]),
                 })
 
@@ -139,6 +143,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                 "oceny": grades,
                 "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
                 "wiadomosci": self._build_wiadomosci(messages),
+                "semestr_biezacy": current_sem,
             }
 
         except UpdateFailed:
@@ -255,6 +260,7 @@ class LibrusOcenySensor(CoordinatorEntity, SensorEntity):
             "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
             "liczba_przedmiotow": len(oceny_wg_przedmiotu),
             "sa_nowe_oceny": sa_nowe,
+            "semestr": data.get("semestr_biezacy"),
         }
 
 
