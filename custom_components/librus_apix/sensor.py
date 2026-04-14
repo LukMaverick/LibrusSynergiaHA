@@ -104,7 +104,21 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             messages = await self.client.async_get_messages(count=10)
 
             if grades is None:
-                raise UpdateFailed("Nie udalo sie pobrac ocen")
+                # Zachowaj poprzednie dane o ocenach jesli dostepne, wiadomosci zaktualizuj jesli OK
+                prev = self.data or {}
+                if not prev.get("oceny"):
+                    raise UpdateFailed("Nie udalo sie pobrac ocen i brak danych w cache")
+                _LOGGER.warning("Nie udalo sie pobrac ocen - uzywam poprzednich danych z cache")
+                return {
+                    "student_info": student_info or prev.get("student_info"),
+                    "oceny": prev.get("oceny", []),
+                    "oceny_wg_przedmiotu": prev.get("oceny_wg_przedmiotu", {}),
+                    "wiadomosci": (
+                        self._build_wiadomosci(messages)
+                        if messages is not None
+                        else prev.get("wiadomosci", [])
+                    ),
+                }
 
             # Grupuj oceny wg przedmiotu i oznacz nowe
             oceny_wg_przedmiotu: Dict[str, List[Dict]] = {}
@@ -120,19 +134,25 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     "jest_nowa": _jest_nowa(grade["date"]),
                 })
 
-            # Oznacz nowe wiadomosci
-            for msg in messages or []:
-                msg["jest_nowa"] = _jest_nowa(msg["date"])
-
             return {
                 "student_info": student_info,
                 "oceny": grades,
                 "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
-                "wiadomosci": messages or [],
+                "wiadomosci": self._build_wiadomosci(messages),
             }
 
+        except UpdateFailed:
+            raise
         except Exception as err:
             raise UpdateFailed(f"Blad komunikacji z API: {err}") from err
+
+    def _build_wiadomosci(self, messages: Optional[List[Dict]]) -> List[Dict]:
+        """Oznacz nowe wiadomosci i zwroc liste."""
+        result = []
+        for msg in messages or []:
+            msg["jest_nowa"] = _jest_nowa(msg.get("date", ""))
+            result.append(msg)
+        return result
 
 
 def _device_info(coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> Dict[str, Any]:
