@@ -108,25 +108,58 @@ class LibrusApiClient:
             _LOGGER.error("Failed to get grades: %s", ex)
             return None
 
-    async def async_get_messages(self, count: int = 5):
-        """Get latest messages from Librus."""
+    async def async_get_messages(self, count: int = 10):
+        """Get latest messages from Librus with full content."""
         try:
             if not self._client or not self._token:
                 if not await self.async_authenticate():
                     return None
 
-            from librus_apix.messages import get_received
-            
+            from librus_apix.messages import get_received, message_content
+
             loop = asyncio.get_event_loop()
-            messages = await loop.run_in_executor(
-                None, get_received, self._client, 1
-            )
-            
-            # Return only the requested count
-            return messages[:count] if messages else []
-            
+            messages = await loop.run_in_executor(None, get_received, self._client, 1)
+            messages = messages[:count] if messages else []
+
+            result = []
+            for msg in messages:
+                try:
+                    content_data = await loop.run_in_executor(
+                        None, message_content, self._client, msg.href
+                    )
+                    full_content = content_data.content.strip() if content_data else ""
+                except Exception:
+                    full_content = ""
+                result.append({
+                    "author": msg.author,
+                    "title": msg.title,
+                    "date": msg.date,
+                    "href": msg.href,
+                    "unread": msg.unread,
+                    "has_attachment": msg.has_attachment,
+                    "content": full_content,
+                })
+
+            return result
+
         except Exception as ex:
             _LOGGER.error("Failed to get messages: %s", ex)
+            return None
+
+    async def async_get_student_information(self):
+        """Get student information from Librus."""
+        try:
+            if not self._client or not self._token:
+                if not await self.async_authenticate():
+                    return None
+
+            from librus_apix.student_information import get_student_information
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, get_student_information, self._client)
+
+        except Exception as ex:
+            _LOGGER.error("Failed to get student information: %s", ex)
             return None
 
 
