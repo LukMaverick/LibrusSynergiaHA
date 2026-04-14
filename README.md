@@ -14,12 +14,11 @@ Integracja Home Assistant z systemem Librus Synergia, umożliwiająca monitorowa
 
 Integracja tworzy następujące sensory:
 
-- `sensor.librus_grades` - Wszystkie oceny z atrybutami
-- `sensor.librus_latest_grade` - Najnowsza ocena  
-- `sensor.librus_total_grades` - Liczba wszystkich ocen
-- `sensor.librus_average_grade` - Średnia wszystkich ocen
-- `sensor.librus_unread_messages` - Liczba nieprzeczytanych wiadomości
-- `sensor.librus_latest_message` - Najnowsza wiadomość
+- `sensor.librus_uczen` - Informacje o uczniu (klasa, wychowawca, szkoła)
+- `sensor.librus_szczesliwy_numerek` - Szczęśliwy numerek dnia
+- `sensor.librus_oceny` - Wszystkie oceny bieżącego semestru pogrupowane wg przedmiotów
+- `sensor.librus_wiadomosci` - Ostatnie 5 wiadomości z pełną treścią
+- `sensor.librus_<przedmiot>` - Osobny sensor dla każdego przedmiotu (np. `sensor.librus_matematyka`)
 
 ## 📦 Instalacja
 
@@ -79,12 +78,10 @@ docker-compose up -d
 type: entities
 title: "📚 Oceny Librus"
 entities:
-  - entity: sensor.librus_latest_grade
-    name: "Najnowsza ocena"
-  - entity: sensor.librus_average_grade  
-    name: "Średnia ocen"
-  - entity: sensor.librus_total_grades
+  - entity: sensor.librus_oceny
     name: "Liczba ocen"
+  - entity: sensor.librus_szczesliwy_numerek
+    name: "Szczęśliwy numerek"
 ```
 
 ### Karta wiadomości
@@ -92,23 +89,8 @@ entities:
 type: entities
 title: "📧 Wiadomości Librus"
 entities:
-  - entity: sensor.librus_latest_message
-    name: "Najnowsza wiadomość"
-  - entity: sensor.librus_unread_messages
-    name: "Nieprzeczytane"
-```
-
-### Karta trendu ocen
-```yaml
-type: gauge
-entity: sensor.librus_average_grade
-name: "Średnia ocen"
-min: 1
-max: 6
-severity:
-  green: 5
-  yellow: 4
-  red: 3
+  - entity: sensor.librus_wiadomosci
+    name: "Nieprzeczytane wiadomości"
 ```
 
 ## 🔔 Automatyzacje powiadomień na telefon
