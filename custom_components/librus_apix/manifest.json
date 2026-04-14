@@ -1,13 +1,20 @@
-{
-  "domain": "librus_apix",
-  "name": "Librus Synergia HA",
-  "codeowners": ["@LukMaverick"],
-  "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/LukMaverick/LibrusSynergiaHA",
-  "integration_type": "service",
-  "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/LukMaverick/LibrusSynergiaHA/issues",
-  "requirements": ["librus-apix", "aiohttp"],
-  "version": "0.1.0"
+﻿{
+    "domain":  "librus_apix",
+    "name":  "Librus Synergia HA",
+    "codeowners":  [
+                       "@LukMaverick"
+                   ],
+    "config_flow":  true,
+    "dependencies":  [
+
+                     ],
+    "documentation":  "https://github.com/LukMaverick/LibrusSynergiaHA",
+    "integration_type":  "service",
+    "iot_class":  "cloud_polling",
+    "issue_tracker":  "https://github.com/LukMaverick/LibrusSynergiaHA/issues",
+    "requirements":  [
+                         "librus-apix",
+                         "aiohttp"
+                     ],
+    "version":  "0.1.1"
 }

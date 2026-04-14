@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
 )
@@ -99,12 +100,12 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with API: {err}")
 
 
-class LibrusApixSensor(SensorEntity):
+class LibrusApixSensor(CoordinatorEntity, SensorEntity):
     """Implementation of a Librus APIX sensor."""
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, sensor_type: str, config_entry: ConfigEntry):
         """Initialize the sensor."""
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self.sensor_type = sensor_type
         self.config_entry = config_entry
         self._attr_name = f"Librus {SENSOR_TYPES[sensor_type]['name']}"
@@ -208,11 +209,3 @@ class LibrusApixSensor(SensorEntity):
                 })
         
         return attributes
-
-    async def async_added_to_hass(self):
-        """When entity is added to hass."""
-        await self.coordinator.async_add_listener(self.async_write_ha_state)
-
-    async def async_will_remove_from_hass(self):
-        """When entity will be removed from hass."""
-        await self.coordinator.async_remove_listener(self.async_write_ha_state)
