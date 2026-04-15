@@ -30,7 +30,7 @@ async def validate_input(hass: HomeAssistant, data: dict):
     # Test authentication
     try:
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         client = await loop.run_in_executor(None, new_client)
         token = await loop.run_in_executor(None, client.get_token, username, password)
         
