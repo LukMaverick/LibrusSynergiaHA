@@ -157,7 +157,7 @@ class LibrusApiClient:
                     return None
 
     async def async_get_messages(self, count: int = 10):
-        """Get latest messages from Librus with full content."""
+        """Get latest messages from Librus (subject and sender only, no content fetch to avoid marking as read)."""
         for attempt in range(2):
             try:
                 if not self._client or not self._token:
@@ -165,34 +165,23 @@ class LibrusApiClient:
                         return None
                 client = self._client
 
-                from librus_apix.messages import get_received, message_content
+                from librus_apix.messages import get_received
 
                 loop = asyncio.get_running_loop()
                 messages = await loop.run_in_executor(None, get_received, client, 0)
                 messages = messages[:count] if messages else []
 
-                result = []
-                for msg in messages:
-                    try:
-                        content_data = await loop.run_in_executor(
-                            None, message_content, client, msg.href
-                        )
-                        full_content = content_data.content.strip() if content_data else ""
-                    except Exception as content_ex:
-                        _LOGGER.warning(
-                            "Could not fetch content for message '%s': %s",
-                            msg.title, content_ex,
-                        )
-                        full_content = ""
-                    result.append({
+                result = [
+                    {
                         "author": msg.author,
                         "title": msg.title,
                         "date": msg.date,
                         "href": msg.href,
                         "unread": msg.unread,
                         "has_attachment": msg.has_attachment,
-                        "content": full_content,
-                    })
+                    }
+                    for msg in messages
+                ]
 
                 return result
 

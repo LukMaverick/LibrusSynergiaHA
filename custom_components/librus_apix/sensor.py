@@ -191,7 +191,6 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         "nadawca": msg.get("author", ""),
                         "temat": msg.get("title", ""),
                         "data": msg.get("date", ""),
-                        "tresc": msg.get("content", "")[:500],
                         "ma_zalacznik": msg.get("has_attachment", False),
                     },
                 )
@@ -467,7 +466,7 @@ class LibrusSredniaPrzedmiotuSensor(CoordinatorEntity, SensorEntity):
 
 
 class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
-    """Czujnik z wiadomosciami (z pelna trescia)."""
+    """Czujnik z wiadomosciami (temat i nadawca, bez pobierania tresci)."""
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         """Inicjalizacja."""
@@ -496,7 +495,6 @@ class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
                     "nadawca": m["author"],
                     "temat": m["title"],
                     "data": m["date"],
-                    "tresc": m.get("content", ""),
                     "nieprzeczytana": m.get("unread", False),
                     "jest_nowa": m.get("jest_nowa", False),
                     "ma_zalacznik": m.get("has_attachment", False),
