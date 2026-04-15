@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 
 from librus_apix.client import Client, new_client
+from librus_apix.exceptions import TokenError
 
 from .const import DOMAIN, SCAN_INTERVAL
 
@@ -54,6 +55,7 @@ class LibrusApiClient:
         self.password = password
         self._client: Client = None
         self._token = None
+        self._auth_lock = asyncio.Lock()
 
     def _reset_auth(self) -> None:
         """Reset authentication state to force re-authentication on next call."""
@@ -62,18 +64,19 @@ class LibrusApiClient:
 
     async def async_authenticate(self):
         """Authenticate with Librus API."""
-        try:
-            loop = asyncio.get_running_loop()
-            self._client = await loop.run_in_executor(None, new_client)
-            self._token = await loop.run_in_executor(
-                None, self._client.get_token, self.username, self.password
-            )
-            _LOGGER.debug("Authentication successful for %s", self.username)
-            return True
-        except Exception as ex:
-            _LOGGER.error("Authentication failed: %s\n%s", ex, traceback.format_exc())
-            self._reset_auth()
-            return False
+        async with self._auth_lock:
+            try:
+                loop = asyncio.get_running_loop()
+                self._client = await loop.run_in_executor(None, new_client)
+                self._token = await loop.run_in_executor(
+                    None, self._client.get_token, self.username, self.password
+                )
+                _LOGGER.debug("Authentication successful for %s", self.username)
+                return True
+            except Exception as ex:
+                _LOGGER.error("Authentication failed: %s\n%s", ex, traceback.format_exc())
+                self._reset_auth()
+                return False
 
     async def async_get_grades(self):
         """Get grades from Librus."""
@@ -82,12 +85,13 @@ class LibrusApiClient:
                 if not self._client or not self._token:
                     if not await self.async_authenticate():
                         return None
+                client = self._client
 
                 from librus_apix.grades import get_grades
 
                 loop = asyncio.get_running_loop()
                 numeric_grades, average_grades, descriptive_grades = await loop.run_in_executor(
-                    None, get_grades, self._client, "all"
+                    None, get_grades, client, "all"
                 )
 
                 current_sem = _current_semester()
@@ -134,6 +138,15 @@ class LibrusApiClient:
 
                 return all_grades
 
+            except TokenError as ex:
+                _LOGGER.warning(
+                    "Token expired fetching grades (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get grades after re-authentication.")
+                    return None
             except Exception as ex:
                 _LOGGER.error(
                     "Failed to get grades (attempt %d/2): %s\n%s",
@@ -150,18 +163,19 @@ class LibrusApiClient:
                 if not self._client or not self._token:
                     if not await self.async_authenticate():
                         return None
+                client = self._client
 
                 from librus_apix.messages import get_received, message_content
 
                 loop = asyncio.get_running_loop()
-                messages = await loop.run_in_executor(None, get_received, self._client, 0)
+                messages = await loop.run_in_executor(None, get_received, client, 0)
                 messages = messages[:count] if messages else []
 
                 result = []
                 for msg in messages:
                     try:
                         content_data = await loop.run_in_executor(
-                            None, message_content, self._client, msg.href
+                            None, message_content, client, msg.href
                         )
                         full_content = content_data.content.strip() if content_data else ""
                     except Exception as content_ex:
@@ -182,6 +196,15 @@ class LibrusApiClient:
 
                 return result
 
+            except TokenError as ex:
+                _LOGGER.warning(
+                    "Token expired fetching messages (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get messages after re-authentication.")
+                    return None
             except Exception as ex:
                 _LOGGER.error(
                     "Failed to get messages (attempt %d/2): %s\n%s",
