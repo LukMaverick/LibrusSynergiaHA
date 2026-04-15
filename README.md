@@ -94,14 +94,90 @@ entities:
     name: "Szczęśliwy numerek"
 ```
 
-### Karta wiadomości
+### Karta wiadomości (Mushroom)
+
+> **Wymagane:** [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) zainstalowane przez HACS.
+
+#### Jak znaleźć nazwę swojej encji?
+1. Idź do **Developer Tools → States**
+2. Wyszukaj `wiadomosci`
+3. Skopiuj pełną nazwę encji (np. `sensor.wiadomosci`)
+4. Zamień `sensor.wiadomosci` poniżej na swoją nazwę
+
 ```yaml
-type: entities
-title: "📧 Wiadomości Librus"
-entities:
-  - entity: sensor.librus_wiadomosci
-    name: "Nieprzeczytane wiadomości"
+type: vertical-stack
+cards:
+  - type: custom:mushroom-title-card
+    title: 📬 Wiadomości Librus
+    subtitle: >
+      {% set n = state_attr('sensor.wiadomosci', 'liczba_nieprzeczytanych') %}
+      {% if n > 0 %}{{ n }} nieprzeczytanych{% else %}Wszystkie przeczytane{% endif %}
+
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[0].temat | default('brak') }}
+    secondary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[0].nadawca | default('') }}
+      · {{ state_attr('sensor.wiadomosci', 'wiadomosci')[0].data | default('') }}
+    icon: mdi:message-text
+    icon_color: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[0].nieprzeczytana %}red{% else %}grey{% endif %}
+    badge_icon: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[0].ma_zalacznik %}mdi:paperclip{% endif %}
+
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[1].temat | default('brak') }}
+    secondary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[1].nadawca | default('') }}
+      · {{ state_attr('sensor.wiadomosci', 'wiadomosci')[1].data | default('') }}
+    icon: mdi:message-text
+    icon_color: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[1].nieprzeczytana %}red{% else %}grey{% endif %}
+    badge_icon: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[1].ma_zalacznik %}mdi:paperclip{% endif %}
+
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[2].temat | default('brak') }}
+    secondary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[2].nadawca | default('') }}
+      · {{ state_attr('sensor.wiadomosci', 'wiadomosci')[2].data | default('') }}
+    icon: mdi:message-text
+    icon_color: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[2].nieprzeczytana %}red{% else %}grey{% endif %}
+    badge_icon: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[2].ma_zalacznik %}mdi:paperclip{% endif %}
+
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[3].temat | default('brak') }}
+    secondary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[3].nadawca | default('') }}
+      · {{ state_attr('sensor.wiadomosci', 'wiadomosci')[3].data | default('') }}
+    icon: mdi:message-text
+    icon_color: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[3].nieprzeczytana %}red{% else %}grey{% endif %}
+    badge_icon: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[3].ma_zalacznik %}mdi:paperclip{% endif %}
+
+  - type: custom:mushroom-template-card
+    primary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[4].temat | default('brak') }}
+    secondary: >
+      {{ state_attr('sensor.wiadomosci', 'wiadomosci')[4].nadawca | default('') }}
+      · {{ state_attr('sensor.wiadomosci', 'wiadomosci')[4].data | default('') }}
+    icon: mdi:message-text
+    icon_color: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[4].nieprzeczytana %}red{% else %}grey{% endif %}
+    badge_icon: >
+      {% if state_attr('sensor.wiadomosci', 'wiadomosci')[4].ma_zalacznik %}mdi:paperclip{% endif %}
 ```
+
+Legenda ikon:
+- 🔴 czerwona = nieprzeczytana
+- ⚫ szara = przeczytana
+- 📎 badge = ma załącznik
 
 ### Wykres średniej z przedmiotu (Gauge)
 ```yaml
@@ -126,7 +202,9 @@ Zdarzenia są wykrywane przy każdym odświeżeniu (co 2h). Pierwsze uruchomieni
 ### 📬 Powiadomienie o nowej wiadomości
 
 Zdarzenie: `librus_apix_nowa_wiadomosc`  
-Dostępne dane: `nadawca`, `temat`, `tresc`, `data`, `ma_zalacznik`
+Dostępne dane: `nadawca`, `temat`, `data`, `ma_zalacznik`
+
+> **Uwaga:** Treść wiadomości nie jest pobierana celowo — aby nie oznaczać wiadomości jako przeczytanych w Librusie.
 
 ```yaml
 automation:
@@ -141,7 +219,6 @@ automation:
           message: >-
             Od: {{ trigger.event.data.nadawca }}
             Temat: {{ trigger.event.data.temat }}
-            {{ trigger.event.data.tresc }}
 ```
 
 ### 📝 Powiadomienie o nowej ocenie
