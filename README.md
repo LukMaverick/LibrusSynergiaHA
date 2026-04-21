@@ -210,16 +210,20 @@ Dostępne dane: `nadawca`, `temat`, `data`, `ma_zalacznik`
 automation:
   - alias: "Librus - nowa wiadomosc"
     trigger:
-      platform: event
-      event_type: librus_apix_nowa_wiadomosc
+      - platform: event
+        event_type: librus_apix_nowa_wiadomosc
     action:
       - service: notify.mobile_app_NAZWA_TWOJEGO_TELEFONU
         data:
           title: "📬 Librus: nowa wiadomość"
           message: >-
-            Od: {{ trigger.event.data.nadawca }}
-            Temat: {{ trigger.event.data.temat }}
+            {% set msg = state_attr('sensor.librus_IMIE_NAZWISKO_wiadomosci', 'wiadomosci')
+               | selectattr('nieprzeczytana', 'equalto', true) | list | first | default({}) %}
+            Od: {{ msg.nadawca | default('nieznany') }}
+            Temat: {{ msg.temat | default('brak') }}
 ```
+
+> **Uwaga:** Zamień `sensor.librus_IMIE_NAZWISKO_wiadomosci` na nazwę swojego sensora widoczną w Developer Tools → States.
 
 ### 📝 Powiadomienie o nowej ocenie
 
