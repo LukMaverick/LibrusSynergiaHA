@@ -179,6 +179,47 @@ Legenda ikon:
 - ⚫ szara = przeczytana
 - 📎 badge = ma załącznik
 
+### Karta terminarza (wszystkie zdarzenia)
+
+> Znajdź nazwę encji w **Developer Tools → States** (szukaj `terminarz`).
+
+```yaml
+type: markdown
+title: 📅 Terminarz
+content: >
+  {% set zdarzenia = state_attr('sensor.TWOJA_ENCJA_terminarz', 'zdarzenia') %}
+  {% if zdarzenia %}
+  | Data | Dzień | Typ | Przedmiot | Opis |
+  |------|-------|-----|-----------|------|
+  {% for z in zdarzenia %}
+  | **{{ z.data }}** | {{ z.tydzien }} | {{ z.tytul }} | {{ z.przedmiot }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown' else '' }} |
+  {% endfor %}
+  {% else %}
+  Brak nadchodzących zdarzeń.
+  {% endif %}
+```
+
+### Karta sprawdzianów i klasówek (bez dni wolnych)
+
+```yaml
+type: markdown
+title: 📝 Sprawdziany i klasówki
+content: >
+  {% set wszystkie = state_attr('sensor.TWOJA_ENCJA_terminarz', 'zdarzenia') %}
+  {% set sprawdziany = wszystkie | selectattr('href', 'search', '^szczegoly/') | list %}
+  {% if sprawdziany %}
+  | Data | Przedmiot | Typ | Nauczyciel | Opis |
+  |------|-----------|-----|------------|------|
+  {% for z in sprawdziany %}
+  | **{{ z.data }}** | {{ z.przedmiot }} | {{ z.tytul }} | {{ z.szczegoly.Nauczyciel if z.szczegoly.Nauczyciel != 'unknown' else '' }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown' else '' }} |
+  {% endfor %}
+  {% else %}
+  Brak nadchodzących sprawdzianów.
+  {% endif %}
+```
+
+> Dni wolne mają `href` zaczynający się od `szczegoly_wolne/` — filtr `^szczegoly/` je wyklucza.
+
 ### Wykres średniej z przedmiotu (Gauge)
 ```yaml
 type: gauge

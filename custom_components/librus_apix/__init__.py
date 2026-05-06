@@ -203,6 +203,106 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
+    async def async_get_homework(self):
+        """Get upcoming homework assignments from Librus (next 30 days)."""
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.homework import get_homework
+                from datetime import date as _date, timedelta
+
+                today = _date.today()
+                date_from = today.strftime("%Y-%m-%d")
+                date_to = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(
+                    None, get_homework, self._client, date_from, date_to
+                )
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching homework (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get homework after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get homework (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
+    async def async_get_schedule(self):
+        """Get upcoming calendar events from Librus (current + next month, filtered to future dates)."""
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.schedule import get_schedule
+                from datetime import date as _date
+                import calendar
+
+                today = _date.today()
+                loop = asyncio.get_running_loop()
+
+                def _fetch_two_months():
+                    events = []
+                    for year, month in [
+                        (today.year, today.month),
+                        (
+                            today.year + 1 if today.month == 12 else today.year,
+                            1 if today.month == 12 else today.month + 1,
+                        ),
+                    ]:
+                        monthly = get_schedule(self._client, str(month).zfill(2), str(year))
+                        for day_num, day_events in monthly.items():
+                            event_date = _date(year, month, int(day_num))
+                            if event_date < today:
+                                continue
+                            for ev in day_events:
+                                events.append({
+                                    "data": event_date.strftime("%Y-%m-%d"),
+                                    "tydzien": event_date.strftime("%A"),
+                                    "tytul": ev.title,
+                                    "przedmiot": ev.subject,
+                                    "godzina": ev.hour,
+                                    "numer_lekcji": ev.number,
+                                    "szczegoly": ev.data,
+                                    "href": ev.href,
+                                })
+                    return sorted(events, key=lambda e: e["data"])
+
+                return await loop.run_in_executor(None, _fetch_two_months)
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching schedule (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get schedule after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get schedule (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
     async def async_get_student_information(self):
         """Get student information from Librus."""
         try:

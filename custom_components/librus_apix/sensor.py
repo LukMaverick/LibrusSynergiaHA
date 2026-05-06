@@ -1,4 +1,4 @@
-﻿"""Platforma czujników dla integracji Librus APIX."""
+"""Platforma czujników dla integracji Librus APIX."""
 
 import logging
 from datetime import date, datetime, timedelta
@@ -74,6 +74,8 @@ async def async_setup_entry(
         LibrusSzczesliwyNumerekSensor(coordinator, config_entry),
         LibrusOcenySensor(coordinator, config_entry),
         LibrusWiadomosciSensor(coordinator, config_entry),
+        LibrusZadaniaSensor(coordinator, config_entry),
+        LibrusTerminarzSensor(coordinator, config_entry),
     ]
 
     # Tworz czujniki per przedmiot na podstawie pierwszego pobrania danych
@@ -89,6 +91,8 @@ async def async_setup_entry(
 
 EVENT_NOWA_WIADOMOSC = f"{DOMAIN}_nowa_wiadomosc"
 EVENT_NOWA_OCENA = f"{DOMAIN}_nowa_ocena"
+EVENT_NOWE_ZADANIE = f"{DOMAIN}_nowe_zadanie"
+EVENT_NOWE_ZDARZENIE = f"{DOMAIN}_nowe_zdarzenie"
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
@@ -99,6 +103,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
         self.client = client
         self._seen_message_hrefs: set = set()
         self._seen_grade_ids: set = set()
+        self._seen_homework_ids: set = set()
+        self._seen_schedule_ids: set = set()
         self._first_run: bool = True
         super().__init__(
             hass,
@@ -116,6 +122,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             student_info = await self.client.async_get_student_information()
             grades = await self.client.async_get_grades()
             messages = await self.client.async_get_messages(count=10)
+            homework_raw = await self.client.async_get_homework()
+            schedule_raw = await self.client.async_get_schedule()
 
             if grades is None:
                 # Zachowaj poprzednie dane o ocenach jesli dostepne, wiadomosci zaktualizuj jesli OK
@@ -131,6 +139,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         self._build_wiadomosci(messages)
                         if messages is not None
                         else prev.get("wiadomosci", [])
+                    ),
+                    "zadania": (
+                        self._build_zadania(homework_raw)
+                        if homework_raw is not None
+                        else prev.get("zadania", [])
+                    ),
+                    "terminarz": (
+                        schedule_raw
+                        if schedule_raw is not None
+                        else prev.get("terminarz", [])
                     ),
                 }
 
@@ -150,12 +168,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                 })
 
             wiadomosci = self._build_wiadomosci(messages)
+            zadania = self._build_zadania(homework_raw)
+            terminarz = schedule_raw if schedule_raw is not None else []
 
             result = {
                 "student_info": student_info,
                 "oceny": grades,
                 "oceny_wg_przedmiotu": oceny_wg_przedmiotu,
                 "wiadomosci": wiadomosci,
+                "zadania": zadania,
+                "terminarz": terminarz,
                 "semestr_biezacy": current_sem,
             }
 
@@ -168,8 +190,18 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     self._seen_grade_ids.add(
                         (grade["subject"], grade["date"], grade["grade"])
                     )
+                for zadanie in zadania:
+                    self._seen_homework_ids.add(
+                        (zadanie["przedmiot"], zadanie["termin"], zadanie["kategoria"])
+                    )
+                for zdarzenie in terminarz:
+                    self._seen_schedule_ids.add(
+                        (zdarzenie["data"], zdarzenie["tytul"], zdarzenie["przedmiot"])
+                    )
             else:
                 self._fire_events(wiadomosci, grades)
+                self._fire_homework_events(zadania)
+                self._fire_schedule_events(terminarz)
 
             return result
 
@@ -211,6 +243,23 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     },
                 )
 
+    def _fire_schedule_events(self, terminarz: List[Dict]) -> None:
+        """Wyslij zdarzenia HA dla nowych zdarzen w kalendarzu."""
+        for zdarzenie in terminarz:
+            ev_id = (zdarzenie["data"], zdarzenie["tytul"], zdarzenie["przedmiot"])
+            if ev_id not in self._seen_schedule_ids:
+                self._seen_schedule_ids.add(ev_id)
+                _LOGGER.debug("Nowe zdarzenie: %s %s %s", zdarzenie["data"], zdarzenie["przedmiot"], zdarzenie["tytul"])
+                self.hass.bus.fire(
+                    EVENT_NOWE_ZDARZENIE,
+                    {
+                        "data": zdarzenie["data"],
+                        "tytul": zdarzenie["tytul"],
+                        "przedmiot": zdarzenie["przedmiot"],
+                        "godzina": zdarzenie["godzina"],
+                    },
+                )
+
     def _build_wiadomosci(self, messages: Optional[List[Dict]]) -> List[Dict]:
         """Oznacz nowe wiadomosci i zwroc liste."""
         result = []
@@ -218,6 +267,41 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             msg["jest_nowa"] = _jest_nowa(msg.get("date", ""))
             result.append(msg)
         return result
+
+    def _build_zadania(self, homework_raw) -> List[Dict]:
+        """Przetworz liste Homework na liste dict, posortowana po terminie."""
+        if not homework_raw:
+            return []
+        zadania = [
+            {
+                "przedmiot": hw.subject,
+                "kategoria": hw.category,
+                "nauczyciel": hw.teacher,
+                "lekcja": hw.lesson,
+                "data_zadania": hw.task_date,
+                "termin": hw.completion_date,
+                "href": hw.href,
+            }
+            for hw in homework_raw
+        ]
+        return sorted(zadania, key=lambda z: z["termin"])
+
+    def _fire_homework_events(self, zadania: List[Dict]) -> None:
+        """Wyslij zdarzenia HA dla nowych zadan/sprawdzianow."""
+        for zadanie in zadania:
+            hw_id = (zadanie["przedmiot"], zadanie["termin"], zadanie["kategoria"])
+            if hw_id not in self._seen_homework_ids:
+                self._seen_homework_ids.add(hw_id)
+                _LOGGER.debug("Nowe zadanie: %s %s", zadanie["przedmiot"], zadanie["kategoria"])
+                self.hass.bus.fire(
+                    EVENT_NOWE_ZADANIE,
+                    {
+                        "przedmiot": zadanie["przedmiot"],
+                        "kategoria": zadanie["kategoria"],
+                        "termin": zadanie["termin"],
+                        "nauczyciel": zadanie["nauczyciel"],
+                    },
+                )
 
 
 def _device_info(coordinator: DataUpdateCoordinator, config_entry: ConfigEntry) -> Dict[str, Any]:
@@ -468,6 +552,74 @@ class LibrusSredniaPrzedmiotuSensor(CoordinatorEntity, SensorEntity):
             "przedmiot": self._subject,
             "lista_ocen": ", ".join(g["ocena"] for g in oceny),
             "liczba_ocen": len(oceny),
+        }
+
+
+class LibrusTerminarzSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik z nadchodzacymi zdarzeniami z kalendarza Librusa (biezacy + nastepny miesiac)."""
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_has_entity_name = False
+        self._attr_name = "Terminarz"
+        self._attr_unique_id = f"{config_entry.entry_id}_terminarz"
+        self._attr_icon = "mdi:calendar-month"
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        return _device_info(self.coordinator, self._config_entry)
+
+    @property
+    def native_value(self) -> int:
+        return len((self.coordinator.data or {}).get("terminarz", []))
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        terminarz = (self.coordinator.data or {}).get("terminarz", [])
+        typy: Dict[str, int] = {}
+        for z in terminarz:
+            t = z.get("tytul", "")
+            typy[t] = typy.get(t, 0) + 1
+        return {
+            "zdarzenia": terminarz,
+            "liczba_zdarzen": len(terminarz),
+            "typy": typy,
+        }
+
+
+class LibrusZadaniaSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik z nadchodzacymi zadaniami i sprawdzianami (30 dni do przodu)."""
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_has_entity_name = False
+        self._attr_name = "Zadania"
+        self._attr_unique_id = f"{config_entry.entry_id}_zadania"
+        self._attr_icon = "mdi:calendar-check"
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        return _device_info(self.coordinator, self._config_entry)
+
+    @property
+    def native_value(self) -> int:
+        return len((self.coordinator.data or {}).get("zadania", []))
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        zadania = (self.coordinator.data or {}).get("zadania", [])
+        kategorie: Dict[str, int] = {}
+        for z in zadania:
+            k = z.get("kategoria", "")
+            kategorie[k] = kategorie.get(k, 0) + 1
+        return {
+            "zadania": zadania,
+            "liczba_zadan": len(zadania),
+            "kategorie": kategorie,
         }
 
 
