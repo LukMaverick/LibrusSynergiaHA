@@ -187,16 +187,14 @@ Legenda ikon:
 type: markdown
 title: 📅 Terminarz
 content: >
-  {% set zdarzenia = state_attr('sensor.TWOJA_ENCJA_terminarz', 'zdarzenia') %}
-  {% if zdarzenia %}
-  | Data | Dzień | Typ | Przedmiot | Opis |
-  |------|-------|-----|-----------|------|
-  {% for z in zdarzenia %}
-  | **{{ z.data }}** | {{ z.tydzien }} | {{ z.tytul }} | {{ z.przedmiot }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown' else '' }} |
-  {% endfor %}
-  {% else %}
-  Brak nadchodzących zdarzeń.
-  {% endif %}
+  {% set zdarzenia = state_attr('sensor.librus_imie_nazwisko_terminarz',
+  'zdarzenia') %} {% if zdarzenia %} | Data | Dzień | Typ | Przedmiot | Opis |
+   |------|-------|-----|-----------|------|
+  {% for z in zdarzenia %} | **{{ z.data }}** | {{ z.tydzien }} | {{ z.tytul }}
+  | {{ z.przedmiot }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown'
+  else '' }} |
+
+  {% endfor %} {% else %} Brak nadchodzących zdarzeń. {% endif %}
 ```
 
 ### Karta sprawdzianów i klasówek (bez dni wolnych)
@@ -205,20 +203,18 @@ content: >
 type: markdown
 title: 📝 Sprawdziany i klasówki
 content: >
-  {% set wszystkie = state_attr('sensor.TWOJA_ENCJA_terminarz', 'zdarzenia') %}
-  {% set sprawdziany = wszystkie | selectattr('href', 'search', '^szczegoly/') | list %}
-  {% if sprawdziany %}
-  | Data | Przedmiot | Typ | Nauczyciel | Opis |
-  |------|-----------|-----|------------|------|
-  {% for z in sprawdziany %}
-  | **{{ z.data }}** | {{ z.przedmiot }} | {{ z.tytul }} | {{ z.szczegoly.Nauczyciel if z.szczegoly.Nauczyciel != 'unknown' else '' }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown' else '' }} |
-  {% endfor %}
-  {% else %}
-  Brak nadchodzących sprawdzianów.
-  {% endif %}
-```
+  {% set zdarzenia = state_attr('sensor.librus_imie_nazwisko_terminarz',
+  'zdarzenia') %} {% set typy_testow = ['Sprawdzian', 'Kartkówka', 'Klasówka',
+  'Praca klasowa'] %} {% set sprawdziany = zdarzenia | selectattr('tytul', 'in',
+  typy_testow) | list %} {% if sprawdziany %} | Data | Dzień | Typ | Przedmiot |
+  Opis |
+   |------|-------|-----|-----------|------|
+  {% for z in sprawdziany %} | **{{ z.data }}** | {{ z.tydzien }} | {{ z.tytul
+  }} | {{ z.przedmiot }} | {{ z.szczegoly.Opis if z.szczegoly.Opis != 'unknown'
+  else '' }} |
 
-> Dni wolne mają `href` zaczynający się od `szczegoly_wolne/` — filtr `^szczegoly/` je wyklucza.
+  {% endfor %} {% else %} Brak nadchodzących zdarzeń. {% endif %}
+```
 
 ### Wykres średniej z przedmiotu (Gauge)
 ```yaml
