@@ -135,3 +135,19 @@ Thumbs.db
 
 # Test credentials
 test_credentials.yaml
+# Pliki runtime generowane przez Home Assistant w srodowisku testowym
+config/.storage/
+config/.cloud/
+config/.HA_VERSION
+config/.ha_run.lock
+config/home-assistant*.db*
+config/home-assistant.log*
+config/blueprints/
+config/tts/
+config/deps/
+config/image/
+# Mushroom pobierany lokalnie do podgladu kart (663 KB, nie wersjonujemy)
+config/www/mushroom.js
+# Dashboard srodowiska testowego - generowany z kart w README i zawiera
+# entity_id z prawdziwym imieniem ucznia. Repo jest publiczne.
+config/ui-lovelace.yaml

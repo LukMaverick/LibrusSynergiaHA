@@ -17,5 +17,16 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Librus APIX",
+        "description": "Jak często pobierać dane z Librusa. Jedno odświeżenie to 8 zapytań (oceny, wiadomości, zadania, dane ucznia, terminarz i plan lekcji), więc przy 120 minutach wychodzi około 96 zapytań na dobę. Sensory planu przeliczają się co minutę lokalnie i nie generują dodatkowego ruchu.",
+        "data": {
+          "scan_interval_minutes": "Częstotliwość odświeżania (minuty)"
+        }
+      }
+    }
   }
 }

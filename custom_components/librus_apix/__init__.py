@@ -17,6 +17,7 @@ from librus_apix.client import Client, new_client
 from librus_apix.exceptions import TokenError
 
 from .const import DOMAIN, SCAN_INTERVAL
+from .plan_lekcji import DNI_TYGODNIA_PL, przetworz_plan
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -273,7 +274,10 @@ class LibrusApiClient:
                             for ev in day_events:
                                 events.append({
                                     "data": event_date.strftime("%Y-%m-%d"),
-                                    "tydzien": event_date.strftime("%A"),
+                                    "tydzien": DNI_TYGODNIA_PL.get(
+                                        event_date.strftime("%A"),
+                                        event_date.strftime("%A"),
+                                    ),
                                     "tytul": ev.title,
                                     "przedmiot": ev.subject,
                                     "godzina": ev.hour,
@@ -297,6 +301,61 @@ class LibrusApiClient:
             except Exception as ex:
                 _LOGGER.error(
                     "Failed to get schedule (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
+    async def async_get_timetable(self):
+        """Get lesson timetable from Librus (current and next week).
+
+        A failure to parse one week (e.g. a holiday week with no periods) is
+        tolerated - the remaining week is still returned.
+        """
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.timetable import get_timetable
+                from librus_apix.exceptions import ParseError
+                from datetime import datetime as _datetime, timedelta
+
+                today = date.today()
+                monday = today - timedelta(days=today.weekday())
+                loop = asyncio.get_running_loop()
+
+                def _fetch_two_weeks():
+                    weeks = []
+                    for offset in (0, 7):
+                        start = _datetime.combine(
+                            monday + timedelta(days=offset), _datetime.min.time()
+                        )
+                        try:
+                            weeks.append(get_timetable(self._client, start))
+                        except ParseError as parse_err:
+                            _LOGGER.debug(
+                                "Brak planu lekcji dla tygodnia od %s: %s",
+                                start.date(), parse_err,
+                            )
+                    return przetworz_plan(weeks)
+
+                return await loop.run_in_executor(None, _fetch_two_weeks)
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching timetable (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get timetable after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get timetable (attempt %d/2): %s\n%s",
                     attempt + 1, ex, traceback.format_exc(),
                 )
                 self._reset_auth()

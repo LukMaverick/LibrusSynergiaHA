@@ -1,5 +1,10 @@
 # Basic configuration for testing Librus APIX integration
 
+# Bez tego HA startuje w UTC, a szablony uzywajace now() pokazuja
+# godziny przesuniete wzgledem zegara uzytkownika.
+homeassistant:
+  time_zone: Europe/Warsaw
+
 default_config:
 
 # Logger configuration for debugging
@@ -47,33 +52,13 @@ automation:
           message: "{{ trigger.to_state.state }}"
           notification_id: "new_message"
 
-# Example sensor for grade average tracking
-sensor:
-  - platform: template
-    sensors:
-      librus_grade_trend:
-        friendly_name: "Grade Trend"
-        value_template: >-
-          {% set avg = states('sensor.librus_average_grade') | float %}
-          {% if avg >= 5.0 %}
-            Excellent
-          {% elif avg >= 4.5 %}
-            Very Good
-          {% elif avg >= 4.0 %}
-            Good
-          {% elif avg >= 3.5 %}
-            Satisfactory
-          {% else %}
-            Needs Improvement
-          {% endif %}
-        icon_template: >-
-          {% set avg = states('sensor.librus_average_grade') | float %}
-          {% if avg >= 5.0 %}
-            mdi:trophy
-          {% elif avg >= 4.5 %}
-            mdi:medal
-          {% elif avg >= 4.0 %}
-            mdi:thumb-up
-          {% else %}
-            mdi:alert-circle
-          {% endif %}
+# --- Podglad demonstracyjny planu lekcji (bez konta Librusa) ---
+# Atrapy sensorow o takich samych nazwach i atrybutach jak encje integracji.
+template: !include_dir_merge_list template_config
+
+# Dashboard w trybie YAML + karty Mushroom serwowane z config/www/
+lovelace:
+  mode: yaml
+  resources:
+    - url: /local/mushroom.js
+      type: module

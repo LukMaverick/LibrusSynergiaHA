@@ -1,0 +1,185 @@
+# Gotowy dashboard: plan lekcji Librus
+#
+# JAK UZYC
+#   1. Zamien w calym pliku "sensor.librus_imie_nazwisko" na swoja encje.
+#      Znajdziesz ja w Narzedzia deweloperskie -> Stany, szukajac "plan_lekcji".
+#      Encje biora nazwe od imienia i nazwiska ucznia, np.
+#      sensor.librus_jan_kowalski_plan_lekcji
+#   2. Ustawienia -> Dashboardy -> Dodaj dashboard -> Nowy dashboard od zera
+#   3. Otworz go, menu (trzy kropki) -> Edytuj -> znowu trzy kropki ->
+#      Edytor nieprzetworzonej konfiguracji (Raw configuration editor)
+#   4. Wklej cala zawartosc tego pliku i zapisz
+#
+# WYMAGA
+#   Mushroom Cards (HACS -> Frontend -> "Mushroom"). Bez tego karty
+#   custom:mushroom-* pokaza blad "Custom element doesn't exist".
+#
+# UKLAD
+#   Karty sa opakowane w jeden vertical-stack, zeby wymusic jedna kolumne.
+#   max_columns w widoku nie zadziala - domyslny widok masonry ignoruje
+#   konfiguracje i liczy kolumny wylacznie z szerokosci ekranu.
+views:
+- title: Plan lekcji
+  path: plan-lekcji
+  icon: mdi:timetable
+  cards:
+  - type: vertical-stack
+    cards:
+    - type: vertical-stack
+      cards:
+      - type: custom:mushroom-title-card
+        title: 📅 Nadchodzące wydarzenia
+        subtitle: '{% set z = state_attr(''sensor.librus_imie_nazwisko_terminarz'', ''zdarzenia'') or [] %} {% set do = (now() + timedelta(days=28)).strftime(''%Y-%m-%d'') %} {% set n = z | selectattr(''data'', ''le'', do) | list | count %} {% set r = n % 10 %}{% set s = n % 100 %} {% if n == 0 %}Najbliższe 4 tygodnie bez wydarzeń{% else %}{{ n }} {% if n == 1 %}wydarzenie{% elif r in [2, 3, 4] and s not in [12, 13, 14] %}wydarzenia{% else %}wydarzeń{% endif %} w najbliższych 4 tygodniach{% endif %}'
+      - type: markdown
+        content: '{%- set wszystkie = state_attr(''sensor.librus_imie_nazwisko_terminarz'', ''zdarzenia'') or [] %}
+
+          {%- set do = (now() + timedelta(days=28)).strftime(''%Y-%m-%d'') %}
+
+          {%- set zdarzenia = wszystkie | selectattr(''data'', ''le'', do) | list %}
+
+          {%- set testy = [''sprawdzian'', ''kartkówka'', ''klasówka'', ''praca klasowa''] %}
+
+          {%- if zdarzenia %}
+
+          | Data | Dzień | Wydarzenie | Przedmiot | Szczegóły |
+
+          |------|-------|------------|-----------|-----------|
+
+          {%- for z in zdarzenia %}
+
+          {%- set k = ''#e53935'' if z.tytul | lower in testy else '''' %}
+
+          {%- set opis = z.szczegoly.Opis if z.szczegoly.Opis not in [none, '''', ''unknown''] else '''' %}
+
+          | {% if k %}<font color="{{ k }}">**{% endif %}{{ z.data }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ z.tydzien }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ z.tytul }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ z.przedmiot }}{% if k %}**</font>{% endif %} | {{ opis }}{% if z.godzina not in ['''', ''unknown'', none] %}{% if opis %} · {% endif %}{{ z.godzina }}{% endif %} |
+
+          {%- endfor %}
+
+          {%- else %}
+
+          Brak wydarzeń w najbliższych 4 tygodniach.
+
+          {%- endif %}'
+    - type: vertical-stack
+      cards:
+      - type: custom:mushroom-title-card
+        title: 📚 Plan lekcji
+        subtitle: '{% set p = ''sensor.librus_imie_nazwisko_plan_lekcji'' %} {% set dt = state_attr(p, ''biezacy_dzien_data'') %} {% set tydzien = state_attr(p, ''tydzien'') %} {% set d = tydzien[dt] if dt in tydzien else [] %} {% if not d %}Brak nadchodzących lekcji 🎉{% else %}{% if dt == now().strftime(''%Y-%m-%d'') %}Dziś{% else %}{{ state_attr(p, ''biezacy_dzien_nazwa'') }} {{ state_attr(p, ''biezacy_dzien_data'') }}{% endif %} · {{ d | count }} lekcji · {{ d[0].od }}–{{ d[-1].do }}{% endif %}'
+      - type: custom:mushroom-template-card
+        primary: "{% set s = 'sensor.librus_imie_nazwisko_nastepna_lekcja' %} {% if states(s) in ['unknown', 'unavailable', 'None'] %}\n  Brak zaplanowanych lekcji\n{% else %}\n  {{ states(s) }}\n{% endif %}"
+        secondary: "{% set s = 'sensor.librus_imie_nazwisko_nastepna_lekcja' %} {% if states(s) in ['unknown', 'unavailable', 'None'] %}\n  —\n{% elif state_attr(s, 'trwa_teraz') %}\n  Trwa do {{ state_attr(s, 'do') }} · {{ state_attr(s, 'nauczyciel_sala') }}\n{% elif state_attr(s, 'data') != now().strftime('%Y-%m-%d') %}\n  {{ state_attr(s, 'dzien_tygodnia') }} {{ state_attr(s, 'od') }} · {{ state_attr(s, 'nauczyciel_sala') }}\n{% else %}\n  {{ state_attr(s, 'numer') }}. lekcja · {{ state_attr(s, 'od') }} ·\n  za {{ state_attr(s, 'za_minut') }} min\n{% endif %}"
+        icon: '{% set s = ''sensor.librus_imie_nazwisko_nastepna_lekcja'' %} {% if state_attr(s, ''trwa_teraz'') %}mdi:school {% elif state_attr(s, ''data'') != now().strftime(''%Y-%m-%d'') %}mdi:calendar-clock {% else %}mdi:clock-start{% endif %}'
+        icon_color: '{% set s = ''sensor.librus_imie_nazwisko_nastepna_lekcja'' %} {% if state_attr(s, ''zastepstwo'') %}orange {% elif state_attr(s, ''trwa_teraz'') %}green {% else %}blue{% endif %}'
+        badge_icon: "{% if state_attr('sensor.librus_imie_nazwisko_nastepna_lekcja', 'zastepstwo') %}\n  mdi:account-switch\n{% endif %}"
+        badge_color: orange
+      - type: conditional
+        conditions:
+        - condition: state
+          entity: sensor.librus_imie_nazwisko_plan_lekcji
+          attribute: sa_zmiany
+          state: true
+        card:
+          type: custom:mushroom-template-card
+          primary: Zmiany w planie
+          secondary: '{% set z = state_attr(''sensor.librus_imie_nazwisko_plan_lekcji'', ''zmiany'') %} {{ z | count }} zmian w najbliższym tygodniu'
+          icon: mdi:calendar-alert
+          icon_color: orange
+      - type: markdown
+        content: '{%- set p = ''sensor.librus_imie_nazwisko_plan_lekcji'' %}
+
+          {%- set d = state_attr(p, ''biezacy_dzien_data'') %}
+
+          {%- set tydzien = state_attr(p, ''tydzien'') %}
+
+          {%- set lekcje = tydzien[d] if d in tydzien else [] %}
+
+          {%- set wd = state_attr(p, ''wydarzenia_dnia'') %}
+
+          {%- set zd = state_attr(p, ''zadania_dnia'') %}
+
+          {%- if lekcje %}
+
+          **{{ state_attr(p, ''biezacy_dzien_nazwa'') }}, {{ d }}**
+
+          {%- for w in (wd[d] if d in wd else []) %}
+
+
+          📌 {{ w.przedmiot }}{% if w.godzina not in ['''', ''unknown''] %} · {{ w.godzina }}{% endif %}
+
+          {%- endfor %}
+
+          {%- for z in (zd[d] if d in zd else []) %}
+
+
+          📚 {{ z.przedmiot }} · {{ z.kategoria }}
+
+          {%- endfor %}
+
+
+          | # | Godzina | Przedmiot | Sala |
+
+          |---|---------|-----------|------|
+
+          {%- for l in lekcje %}
+
+          {%- set k = ''#e53935'' if l.wydarzenia else (''#f9a825'' if l.zadania else '''') %}
+
+          | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.numer }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.od }}–{{ l.do }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{% if l.odwolana %}~~{{ l.przedmiot }}~~{% elif l.zastepstwo and not k %}**{{ l.przedmiot }}** ⚠️{% elif l.zastepstwo %}{{ l.przedmiot }} ⚠️{% else %}{{ l.przedmiot }}{% endif %}{% for w in l.wydarzenia %} 📝 {{ w.tytul }}{% endfor %}{% for z in l.zadania %} 📚 {{ z.kategoria }}{% endfor %}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.nauczyciel_sala }}{% if k %}**</font>{% endif %} |
+
+          {%- endfor %}
+
+          {%- else %}
+
+          Brak nadchodzących lekcji.
+
+          {%- endif %}'
+    - type: markdown
+      title: 🗓️ Plan tygodnia
+      content: '{%- set p = ''sensor.librus_imie_nazwisko_plan_lekcji'' %}
+
+        {%- set tydzien = state_attr(p, ''tydzien'') %}
+
+        {%- set wd = state_attr(p, ''wydarzenia_dnia'') %}
+
+        {%- set zd = state_attr(p, ''zadania_dnia'') %}
+
+        {%- if tydzien %}
+
+        {%- for data, lekcje in tydzien.items() %}
+
+        **{{ lekcje[0].dzien_tygodnia }} {{ data }}**
+
+        {%- for w in (wd[data] if data in wd else []) %}
+
+
+        📌 {{ w.przedmiot }}{% if w.godzina not in ['''', ''unknown''] %} · {{ w.godzina }}{% endif %}
+
+        {%- endfor %}
+
+        {%- for z in (zd[data] if data in zd else []) %}
+
+
+        📚 {{ z.przedmiot }} · {{ z.kategoria }}
+
+        {%- endfor %}
+
+
+        | # | Godzina | Przedmiot | Sala |
+
+        |---|---------|-----------|------|
+
+        {%- for l in lekcje %}
+
+        {%- set k = ''#e53935'' if l.wydarzenia else (''#f9a825'' if l.zadania else '''') %}
+
+        | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.numer }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.od }}–{{ l.do }}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{% if l.odwolana %}~~{{ l.przedmiot }}~~{% elif l.zastepstwo and not k %}**{{ l.przedmiot }}** ⚠️{% elif l.zastepstwo %}{{ l.przedmiot }} ⚠️{% else %}{{ l.przedmiot }}{% endif %}{% for w in l.wydarzenia %} 📝 {{ w.tytul }}{% endfor %}{% for z in l.zadania %} 📚 {{ z.kategoria }}{% endfor %}{% if k %}**</font>{% endif %} | {% if k %}<font color="{{ k }}">**{% endif %}{{ l.nauczyciel_sala }}{% if k %}**</font>{% endif %} |
+
+        {%- endfor %}
+
+        {% endfor %}
+
+        {%- else %}
+
+        Brak danych o planie lekcji.
+
+        {%- endif %}'

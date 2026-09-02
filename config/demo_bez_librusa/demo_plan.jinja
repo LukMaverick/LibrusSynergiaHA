@@ -1,0 +1,79 @@
+{#- Atrapa planu lekcji do podgladu kart Lovelace bez konta Librusa.
+    Zwraca te sama strukture, co atrybuty sensora sensor.*_plan_lekcji.
+    Makra oddaja JSON - u konsumenta trzeba uzyc filtra | from_json. -#}
+
+{%- macro plan_dnia(przesuniecie_dni, kotwica_minuty) -%}
+  {#- Lekcje sa zakotwiczone wzgledem biezacej godziny, dzieki czemu
+      "trwa teraz" i "za X minut" widac o kazdej porze dnia. -#}
+  {%- set przedmioty = [
+        ('Matematyka', 'Kowalska - 12', false, false),
+        ('Jezyk polski', 'Nowak - 8', false, false),
+        ('Fizyka', 'Zielinski - 21', true, false),
+        ('Wychowanie fizyczne', 'Lis - sala gimn.', false, false),
+        ('Historia', 'Mazur - 5', false, true),
+        ('Chemia', 'Dabrowska - 19', false, false),
+        ('Jezyk angielski', 'Wisniewski - 3', false, false)
+      ] -%}
+  {%- set start0 = (now().replace(second=0, microsecond=0)
+                    + timedelta(days=przesuniecie_dni)
+                    - timedelta(minutes=kotwica_minuty)) -%}
+  {%- set dni = ['Poniedzialek','Wtorek','Sroda','Czwartek','Piatek','Sobota','Niedziela'] -%}
+  {%- set ns = namespace(lekcje=[]) -%}
+  {%- for p in przedmioty -%}
+    {%- set od = start0 + timedelta(minutes=55 * loop.index0) -%}
+    {%- set koniec = od + timedelta(minutes=45) -%}
+    {%- set ns.lekcje = ns.lekcje + [{
+          'data': od.strftime('%Y-%m-%d'),
+          'dzien_tygodnia': dni[od.weekday()],
+          'numer': loop.index,
+          'przedmiot': p[0],
+          'nauczyciel_sala': p[1],
+          'od': od.strftime('%H:%M'),
+          'do': koniec.strftime('%H:%M'),
+          'przerwa_od': koniec.strftime('%H:%M'),
+          'przerwa_do': (koniec + timedelta(minutes=10)).strftime('%H:%M'),
+          'odwolana': p[3],
+          'zastepstwo': p[2],
+          'info': 'Zastepstwo' if p[2] else ('Lekcja odwolana' if p[3] else ''),
+          'szczegoly': {}
+        }] -%}
+  {%- endfor -%}
+  {{- ns.lekcje | tojson -}}
+{%- endmacro -%}
+
+{%- macro plan_tygodnia() -%}
+  {#- Piaskownica Jinja w HA blokuje dict.update(), wiec skladamy JSON recznie. -#}
+  {%- set ns = namespace(dni=[]) -%}
+  {%- for d in range(0, 9) -%}
+    {%- if ns.dni | count < 5 -%}
+      {%- set lekcje = plan_dnia(d, 90) | from_json -%}
+      {%- if lekcje[0]['dzien_tygodnia'] not in ['Sobota', 'Niedziela'] -%}
+        {%- set ns.dni = ns.dni + [lekcje] -%}
+      {%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{- '{' -}}
+  {%- for lekcje in ns.dni -%}
+    {{- (lekcje[0]['data'] | tojson) ~ ':' ~ (lekcje | tojson) -}}
+    {{- ',' if not loop.last else '' -}}
+  {%- endfor -%}
+  {{- '}' -}}
+{%- endmacro -%}
+
+{%- macro nastepna_lekcja() -%}
+  {#- Pierwsza nieodwolana lekcja, ktora sie jeszcze nie skonczyla. -#}
+  {%- set lekcje = plan_dnia(0, 90) | from_json -%}
+  {%- set teraz = now().strftime('%H:%M') -%}
+  {%- set ns = namespace(wynik={}) -%}
+  {%- for l in lekcje -%}
+    {%- if not l['odwolana'] and l['do'] > teraz and not ns.wynik -%}
+      {%- set trwa = l['od'] <= teraz -%}
+      {%- set ns.wynik = dict(l, trwa_teraz=trwa, za_minut=(
+            0 if trwa else
+            ((l['od'][:2] | int) * 60 + (l['od'][3:] | int))
+            - ((teraz[:2] | int) * 60 + (teraz[3:] | int))
+          )) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{- ns.wynik | tojson -}}
+{%- endmacro -%}

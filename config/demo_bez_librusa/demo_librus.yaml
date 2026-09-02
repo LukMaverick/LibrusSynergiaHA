@@ -1,0 +1,78 @@
+# Atrapy sensorow Librusa do podgladu kart Lovelace bez konta w dzienniku.
+# Encje maja te same nazwy i atrybuty co te tworzone przez integracje,
+# wiec karty z README dzialaja na nich bez zadnych zmian.
+# Szablony uzywaja now(), wiec Home Assistant przelicza je co minute.
+
+- sensor:
+    - name: "Librus Jan Kowalski Plan lekcji"
+      unique_id: demo_librus_plan_lekcji
+      icon: mdi:timetable
+      state: >-
+        {% from 'demo_plan.jinja' import plan_dnia %}
+        {{ (plan_dnia(0, 90) | from_json) | count }}
+      attributes:
+        dzisiaj: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ plan_dnia(0, 90) | from_json }}
+        jutro: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ plan_dnia(1, 90) | from_json }}
+        tydzien: >-
+          {% from 'demo_plan.jinja' import plan_tygodnia %}
+          {{ plan_tygodnia() | from_json }}
+        liczba_lekcji_dzisiaj: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ (plan_dnia(0, 90) | from_json) | count }}
+        pierwsza_lekcja: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ (plan_dnia(0, 90) | from_json)[0]['od'] }}
+        ostatnia_lekcja: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ (plan_dnia(0, 90) | from_json)[-1]['do'] }}
+        zmiany: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ (plan_dnia(0, 90) | from_json)
+             | selectattr('info', 'ne', '') | list }}
+        sa_zmiany: >-
+          {% from 'demo_plan.jinja' import plan_dnia %}
+          {{ (plan_dnia(0, 90) | from_json)
+             | selectattr('info', 'ne', '') | list | count > 0 }}
+
+    - name: "Librus Jan Kowalski Nastepna lekcja"
+      unique_id: demo_librus_nastepna_lekcja
+      icon: mdi:clock-start
+      state: >-
+        {% from 'demo_plan.jinja' import nastepna_lekcja %}
+        {% set l = nastepna_lekcja() | from_json %}
+        {{ l['przedmiot'] if l else None }}
+      attributes:
+        data: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('data') }}
+        dzien_tygodnia: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('dzien_tygodnia') }}
+        numer: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('numer') }}
+        od: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('od') }}
+        do: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('do') }}
+        nauczyciel_sala: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('nauczyciel_sala') }}
+        za_minut: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('za_minut') }}
+        trwa_teraz: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('trwa_teraz') }}
+        zastepstwo: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('zastepstwo') }}
+        info: >-
+          {% from 'demo_plan.jinja' import nastepna_lekcja %}
+          {{ (nastepna_lekcja() | from_json).get('info') }}

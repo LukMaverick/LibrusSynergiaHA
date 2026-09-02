@@ -1,0 +1,19 @@
+# Zmigrowane z przestarzalego "sensor: - platform: template" w configuration.yaml.
+# Aktualne Home Assistant odrzuca tamten zapis: szablony musza byc pod kluczem "template".
+# Uwaga: encja zrodlowa pochodzi ze starego nazewnictwa integracji i moze nie istniec.
+- sensor:
+    - name: "Grade Trend"
+      unique_id: legacy_librus_grade_trend
+      state: >-
+        {% set avg = states('sensor.librus_average_grade') | float(0) %}
+        {% if avg >= 5.0 %}Excellent
+        {% elif avg >= 4.5 %}Very Good
+        {% elif avg >= 4.0 %}Good
+        {% elif avg >= 3.5 %}Satisfactory
+        {% else %}Needs Improvement{% endif %}
+      icon: >-
+        {% set avg = states('sensor.librus_average_grade') | float(0) %}
+        {% if avg >= 5.0 %}mdi:trophy
+        {% elif avg >= 4.5 %}mdi:medal
+        {% elif avg >= 4.0 %}mdi:thumb-up
+        {% else %}mdi:alert-circle{% endif %}
