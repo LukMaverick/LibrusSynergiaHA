@@ -1,7 +1,7 @@
 {
   "domain": "librus_apix",
   "name": "Librus Synergia HA",
-  "codeowners": ["@LukMaverick"],
+  "codeowners": ["@LukMaverick", "@mchuc"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/LukMaverick/LibrusSynergiaHA",
@@ -9,5 +9,5 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/LukMaverick/LibrusSynergiaHA/issues",
   "requirements": ["librus-apix>=1.5.1", "aiohttp"],
-  "version": "1.1.5"
+  "version": "1.2.0"
 }

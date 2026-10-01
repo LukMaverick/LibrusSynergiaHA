@@ -1,0 +1,146 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Librus Synergia – logowanie",
+        "description": "Podaj dane logowania do Librus Synergia (konto ucznia lub rodzica).",
+        "data": {
+          "username": "Login",
+          "password": "Hasło"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się zalogować do Librusa. Sprawdź login i hasło.",
+      "unknown": "Wystąpił nieoczekiwany błąd"
+    },
+    "abort": {
+      "already_configured": "To konto jest już skonfigurowane"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Librus – bramka SMS i odświeżanie",
+        "description": "Ustawienia są zapisywane w Home Assistant (nie w plikach wtyczki), więc aktualizacja integracji ich nie nadpisze.\n\nW adresach i treści możesz używać placeholderów: `%tekst%` (gotowa treść SMS z pola poniżej – tylko w adresie), `%uczen%`, `%typ%`, `%przedmiot%`, `%ocena%`, `%kategoria%`, `%nauczyciel%`, `%data%`, `%waga%`, `%komentarz%` (jeśli nauczyciel dodał), `%srednia%` (średnia ważona z przedmiotu po tej ocenie), `%tresc%` (uwaga), `%rodzaj%` (uwaga). Wartości w adresie są kodowane do URL automatycznie.\n\nPrzykład adresu: `https://sms.example.pl/smsgateway/48600000000?text=%tekst%`\n\nTest: zaznacz na dole „Wyślij testowy SMS/push” i kliknij „Prześlij” – zobaczysz wynik. Później możesz też użyć przycisków „Test powiadomień – ocena/uwaga” na urządzeniu Librus.\n\nKażda linia w polu adresów to osobny host/numer – SMS zostanie wysłany na wszystkie.",
+        "data": {
+          "scan_interval": "Poza godzinami szkoły: sprawdzaj Librus co (minuty)",
+          "sms_enabled": "Wysyłaj SMS przez własną bramkę (główny włącznik)",
+          "sms_verify_ssl": "Sprawdzaj certyfikat SSL bramki (wyłącz dla self-signed)",
+          "sms_url_oceny": "Adresy bramki – nowa ocena (jeden na linię)",
+          "sms_tekst_oceny": "Treść SMS – nowa ocena",
+          "sms_url_uwagi": "Adresy bramki – nowa uwaga (jeden na linię)",
+          "sms_tekst_uwagi": "Treść SMS – nowa uwaga",
+          "sms_method": "Metoda HTTP bramki",
+          "push_notify": "Push na telefon – usługi notify (jedna na linię)",
+          "sms_headers": "Nagłówki HTTP (jeden na linię, format Nazwa: wartość)",
+          "wyslij_test": "🧪 Wyślij testowy SMS/push po kliknięciu „Prześlij”",
+          "szkola_od": "Godziny szkoły – od",
+          "szkola_do": "Godziny szkoły – do",
+          "szkola_dni_robocze": "Godziny szkoły tylko w dni robocze (pon–pt)",
+          "scan_interval_szkola": "W godzinach szkoły: sprawdzaj Librus co (minuty)"
+        },
+        "data_description": {
+          "scan_interval": "Domyślnie 120 min (po szkole, wieczorem, w weekendy). Pierwsze poranne sprawdzenie jest automatycznie dociągane do początku godzin szkoły.",
+          "sms_enabled": "Gdy wyłączone, integracja NIE wywołuje adresów bramki (adresy zostają zapisane), a nadal wysyła zdarzenia HA (librus_apix_nowa_ocena, librus_apix_nowa_uwaga) i push.",
+          "sms_url_oceny": "Np. https://sms.example.pl/smsgateway/48600000000?text=%tekst% – w kolejnych liniach kolejne numery/hosty. Puste = nie wysyłaj SMS o ocenach.",
+          "sms_url_uwagi": "Puste = nie wysyłaj SMS o uwagach.",
+          "sms_tekst_oceny": "Podstawiana pod %tekst% w adresie.",
+          "sms_tekst_uwagi": "Podstawiana pod %tekst% w adresie.",
+          "sms_method": "GET – parametry w adresie (domyślnie). POST – parametry z części ?a=b&c=d adresu są wysyłane w body (form‑urlencoded). POST JSON – parametry w body jako JSON.",
+          "push_notify": "Nazwa usługi powiadomień HA, np. mobile_app_iphone_marcina (lub notify.mobile_app_iphone_marcina) – znajdziesz ją w Narzędzia deweloperskie → Akcje. Każda linia to osobny telefon. Push jest wysyłany niezależnie od włącznika SMS; puste = brak push.",
+          "sms_headers": "Dołączane do każdego żądania do bramki, np. `Authorization: Bearer TWÓJ_TOKEN` albo `X-Api-Key: abc123`. Basic auth (np. Twilio) możesz też podać w adresie: https://SID:TOKEN@api.twilio.com/…",
+          "wyslij_test": "Wysyła testową „nową ocenę” (5 z „Test (przedmiot)”) przez wpisane wyżej adresy i usługi push, a potem pokazuje wynik. Nie jest zapisywane.",
+          "scan_interval_szkola": "Domyślnie 55 min (lekcja 45 min + przerwa). Minimum 15 min – zbyt częste odpytywanie może skutkować blokadą konta w Librusie.",
+          "szkola_od": "Początek okna „w szkole” (np. 07:00). Ustaw od ≥ do, aby wyłączyć okno i zawsze używać interwału „poza szkołą”."
+        }
+      },
+      "test": {
+        "title": "Wynik testu",
+        "description": "**SMS:** wysłano {sms_ok} z {sms_all} adresów\n**Push:** wysłano {push_ok} z {push_all} usług\n{blad}\n\nSzczegóły (odpowiedź bramki, błędy) są w logach: Ustawienia → System → Logi, filtr „librus”.\n\nKliknij **Prześlij**, aby zapisać ustawienia (albo zamknij okno, aby nie zapisywać)."
+      }
+    },
+    "error": {
+      "sms_url_invalid": "Któryś z adresów jest niepoprawny – każdy musi zaczynać się od http:// lub https:// i zawierać host.",
+      "sms_url_required": "Włączono wysyłkę SMS, ale nie podano żadnego adresu bramki.",
+      "sms_headers_invalid": "Któryś z nagłówków ma zły format – każda linia musi wyglądać jak `Nazwa: wartość`."
+    }
+  },
+  "services": {
+    "wyslij_sms": {
+      "name": "Wyślij SMS przez bramkę",
+      "description": "Wysyła SMS przez bramkę skonfigurowaną w opcjach integracji (lub na adres podany w polu URL). Przydatne do testów i własnych automatyzacji.",
+      "fields": {
+        "typ": {
+          "name": "Typ",
+          "description": "Który zestaw adresów/treści użyć: ocena lub uwaga."
+        },
+        "ocena": {
+          "name": "Ocena",
+          "description": "Np. 5 lub 4+ (placeholder %ocena%)."
+        },
+        "przedmiot": {
+          "name": "Przedmiot",
+          "description": "Placeholder %przedmiot%."
+        },
+        "tresc": {
+          "name": "Treść uwagi",
+          "description": "Placeholder %tresc%."
+        },
+        "rodzaj": {
+          "name": "Rodzaj uwagi",
+          "description": "Np. uwaga / pochwała (placeholder %rodzaj%)."
+        },
+        "kategoria": {
+          "name": "Kategoria",
+          "description": "Placeholder %kategoria%."
+        },
+        "nauczyciel": {
+          "name": "Nauczyciel",
+          "description": "Placeholder %nauczyciel%."
+        },
+        "data": {
+          "name": "Data",
+          "description": "Placeholder %data%."
+        },
+        "uczen": {
+          "name": "Uczeń",
+          "description": "Placeholder %uczen%. Domyślnie imię i nazwisko z Librusa."
+        },
+        "tekst": {
+          "name": "Gotowa treść SMS",
+          "description": "Jeśli podana, zastępuje szablon treści z opcji (placeholder %tekst%)."
+        },
+        "url": {
+          "name": "Adres bramki (opcjonalnie)",
+          "description": "Jeśli podany, wysyła na ten adres (lub adresy – jeden na linię) zamiast na adresy z opcji integracji."
+        },
+        "push": {
+          "name": "Także push",
+          "description": "Wyślij też push przez usługi notify z opcji integracji."
+        },
+        "waga": {
+          "name": "Waga",
+          "description": "Placeholder %waga%."
+        },
+        "komentarz": {
+          "name": "Komentarz",
+          "description": "Placeholder %komentarz%."
+        },
+        "srednia": {
+          "name": "Średnia",
+          "description": "Placeholder %srednia%."
+        }
+      }
+    }
+  },
+  "selector": {
+    "sms_method": {
+      "options": {
+        "get": "GET (parametry w adresie)",
+        "post": "POST (parametry w body, form)",
+        "post_json": "POST JSON (parametry w body jako JSON)"
+      }
+    }
+  }
+}

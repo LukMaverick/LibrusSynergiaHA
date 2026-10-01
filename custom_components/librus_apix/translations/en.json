@@ -1,0 +1,146 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Librus Synergia – sign in",
+        "description": "Enter your Librus Synergia credentials (student or parent account).",
+        "data": {
+          "username": "Username/Login",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Librus. Please check your credentials.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Librus – SMS gateway & polling",
+        "description": "Settings are stored in Home Assistant (not in the integration files), so updating the integration won't overwrite them.\n\nPlaceholders available in URLs and message text: `%tekst%` (rendered SMS text – URL only), `%uczen%` (student), `%typ%`, `%przedmiot%` (subject), `%ocena%` (grade), `%kategoria%`, `%nauczyciel%` (teacher), `%data%`, `%waga%` (weight), `%komentarz%` (teacher's comment), `%srednia%` (weighted subject average after this grade), `%tresc%` (note text), `%rodzaj%` (note kind). Values in URLs are URL-encoded automatically.\n\nExample: `https://sms.example.pl/smsgateway/48600000000?text=%tekst%`\n\nTest: tick “Send a test SMS/push” at the bottom and click Submit – you will see the result. Later you can also use the “Test powiadomien – ocena/uwaga” buttons on the Librus device.\n\nEach line in the URL fields is a separate host/number – the SMS is sent to all of them.",
+        "data": {
+          "scan_interval": "Outside school hours: poll Librus every (minutes)",
+          "sms_enabled": "Send SMS via my own gateway (master switch)",
+          "sms_verify_ssl": "Verify gateway SSL certificate (disable for self-signed)",
+          "sms_url_oceny": "Gateway URLs – new grade (one per line)",
+          "sms_tekst_oceny": "SMS text – new grade",
+          "sms_url_uwagi": "Gateway URLs – new behaviour note (one per line)",
+          "sms_tekst_uwagi": "SMS text – new behaviour note",
+          "sms_method": "Gateway HTTP method",
+          "push_notify": "Push to phone – notify services (one per line)",
+          "sms_headers": "HTTP headers (one per line, Name: value)",
+          "wyslij_test": "🧪 Send a test SMS/push when I click Submit",
+          "szkola_od": "School hours – from",
+          "szkola_do": "School hours – to",
+          "szkola_dni_robocze": "School hours only on weekdays (Mon–Fri)",
+          "scan_interval_szkola": "During school hours: poll Librus every (minutes)"
+        },
+        "data_description": {
+          "scan_interval": "Default 120 min (after school, evenings, weekends). The first morning poll is automatically aligned to the start of school hours.",
+          "sms_enabled": "When off, the integration does NOT call the gateway URLs (they stay saved) but still fires HA events (librus_apix_nowa_ocena, librus_apix_nowa_uwaga) and push.",
+          "sms_url_oceny": "Empty = don't send SMS for grades.",
+          "sms_url_uwagi": "Empty = don't send SMS for notes.",
+          "sms_tekst_oceny": "Substituted for %tekst% in the URL.",
+          "sms_tekst_uwagi": "Substituted for %tekst% in the URL.",
+          "sms_method": "GET – parameters in the URL (default). POST – parameters from the ?a=b&c=d part of the URL are sent in the body (form-urlencoded). POST JSON – parameters in the body as JSON.",
+          "push_notify": "HA notify service name, e.g. mobile_app_my_iphone (or notify.mobile_app_my_iphone) – see Developer tools → Actions. One phone per line. Push is sent regardless of the SMS switch; empty = no push.",
+          "sms_headers": "Added to every gateway request, e.g. `Authorization: Bearer YOUR_TOKEN` or `X-Api-Key: abc123`. Basic auth (e.g. Twilio) can also go in the URL: https://SID:TOKEN@api.twilio.com/…",
+          "wyslij_test": "Sends a test “new grade” (5 in “Test (przedmiot)”) through the URLs and push services above, then shows the result. Not saved.",
+          "scan_interval_szkola": "Default 55 min (45-min lesson + break). Minimum 15 min – polling too often may get the Librus account blocked.",
+          "szkola_od": "Start of the “at school” window (e.g. 07:00). Set from ≥ to in order to disable the window and always use the outside-school interval."
+        }
+      },
+      "test": {
+        "title": "Test result",
+        "description": "**SMS:** sent {sms_ok} of {sms_all} URLs\n**Push:** sent {push_ok} of {push_all} services\n{blad}\n\nDetails (gateway response, errors) are in the logs: Settings → System → Logs, filter “librus”.\n\nClick **Submit** to save the settings (or close the dialog to discard)."
+      }
+    },
+    "error": {
+      "sms_url_invalid": "One of the URLs is invalid – each must start with http:// or https:// and contain a host.",
+      "sms_url_required": "SMS sending is enabled but no gateway URL was provided.",
+      "sms_headers_invalid": "One of the headers is malformed – each line must look like `Name: value`."
+    }
+  },
+  "services": {
+    "wyslij_sms": {
+      "name": "Send SMS via gateway",
+      "description": "Sends an SMS through the gateway configured in the integration options (or to the URL given in the url field). Useful for tests and custom automations.",
+      "fields": {
+        "typ": {
+          "name": "Type",
+          "description": "Which URL/text set to use: ocena (grade) or uwaga (note)."
+        },
+        "ocena": {
+          "name": "Grade",
+          "description": "E.g. 5 or 4+ (placeholder %ocena%)."
+        },
+        "przedmiot": {
+          "name": "Subject",
+          "description": "Placeholder %przedmiot%."
+        },
+        "tresc": {
+          "name": "Note text",
+          "description": "Placeholder %tresc%."
+        },
+        "rodzaj": {
+          "name": "Note kind",
+          "description": "Placeholder %rodzaj%."
+        },
+        "kategoria": {
+          "name": "Category",
+          "description": "Placeholder %kategoria%."
+        },
+        "nauczyciel": {
+          "name": "Teacher",
+          "description": "Placeholder %nauczyciel%."
+        },
+        "data": {
+          "name": "Date",
+          "description": "Placeholder %data%."
+        },
+        "uczen": {
+          "name": "Student",
+          "description": "Placeholder %uczen%. Defaults to the student's name from Librus."
+        },
+        "tekst": {
+          "name": "Rendered SMS text",
+          "description": "If given, replaces the text template from options (placeholder %tekst%)."
+        },
+        "url": {
+          "name": "Gateway URL (optional)",
+          "description": "If given, sends to this URL (or URLs – one per line) instead of the ones from the integration options."
+        },
+        "push": {
+          "name": "Also push",
+          "description": "Also send push via the notify services from the integration options."
+        },
+        "waga": {
+          "name": "Weight",
+          "description": "Placeholder %waga%."
+        },
+        "komentarz": {
+          "name": "Comment",
+          "description": "Placeholder %komentarz%."
+        },
+        "srednia": {
+          "name": "Average",
+          "description": "Placeholder %srednia%."
+        }
+      }
+    }
+  },
+  "selector": {
+    "sms_method": {
+      "options": {
+        "get": "GET (parameters in URL)",
+        "post": "POST (parameters in body, form)",
+        "post_json": "POST JSON (parameters in body as JSON)"
+      }
+    }
+  }
+}

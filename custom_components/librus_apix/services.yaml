@@ -1,0 +1,92 @@
+wyslij_sms:
+  name: Wyślij SMS przez bramkę
+  description: >-
+    Wysyła SMS przez bramkę skonfigurowaną w opcjach integracji Librus
+    (Ustawienia → Integracje → Librus → Konfiguruj) lub na adres podany w polu url.
+  fields:
+    typ:
+      name: Typ
+      description: Który zestaw adresów/treści użyć.
+      default: ocena
+      selector:
+        select:
+          options:
+            - ocena
+            - uwaga
+    ocena:
+      name: Ocena
+      description: Np. 5 lub 4+ (placeholder %ocena%).
+      example: "5"
+      selector:
+        text:
+    przedmiot:
+      name: Przedmiot
+      description: Placeholder %przedmiot%.
+      example: Matematyka
+      selector:
+        text:
+    tresc:
+      name: Treść uwagi
+      description: Placeholder %tresc% (dla typu uwaga).
+      selector:
+        text:
+    rodzaj:
+      name: Rodzaj uwagi
+      description: Np. uwaga / pochwała (placeholder %rodzaj%).
+      selector:
+        text:
+    kategoria:
+      name: Kategoria
+      description: Placeholder %kategoria%.
+      example: Sprawdzian
+      selector:
+        text:
+    nauczyciel:
+      name: Nauczyciel
+      description: Placeholder %nauczyciel%.
+      selector:
+        text:
+    data:
+      name: Data
+      description: Placeholder %data%.
+      selector:
+        text:
+    waga:
+      name: Waga
+      description: Placeholder %waga%.
+      selector:
+        text:
+    komentarz:
+      name: Komentarz do oceny
+      description: Placeholder %komentarz%.
+      selector:
+        text:
+    srednia:
+      name: Średnia
+      description: Placeholder %srednia%.
+      selector:
+        text:
+    uczen:
+      name: Uczeń
+      description: Placeholder %uczen%. Domyślnie imię i nazwisko z Librusa.
+      selector:
+        text:
+    tekst:
+      name: Gotowa treść SMS
+      description: Jeśli podana, zastępuje szablon treści z opcji (placeholder %tekst%).
+      selector:
+        text:
+    url:
+      name: Adres bramki (opcjonalnie)
+      description: >-
+        Jeśli podany, SMS idzie na ten adres (lub adresy – jeden na linię)
+        zamiast na adresy z opcji integracji. Np. https://sms.example.pl/smsgateway/48600000000?text=%tekst%
+      selector:
+        text:
+          multiline: true
+    push:
+      name: Także push
+      description: Wyślij też push przez usługi notify z opcji integracji.
+      default: false
+      selector:
+        boolean:

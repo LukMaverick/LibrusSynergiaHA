@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
@@ -16,9 +16,39 @@ from homeassistant.helpers import config_validation as cv
 from librus_apix.client import Client, new_client
 from librus_apix.exceptions import TokenError
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import (
+    ATTR_PUSH,
+    ATTR_TYP,
+    ATTR_URL,
+    CONF_SMS_HEADERS,
+    CONF_SMS_METHOD,
+    CONF_SMS_TEKST_OCENY,
+    CONF_SMS_TEKST_UWAGI,
+    CONF_SMS_VERIFY_SSL,
+    DEFAULT_SMS_METHOD,
+    DEFAULT_SMS_TEKST_OCENY,
+    DEFAULT_SMS_TEKST_UWAGI,
+    DEFAULT_SMS_VERIFY_SSL,
+    DOMAIN,
+    SCAN_INTERVAL,
+    SERVICE_WYSLIJ_SMS,
+    TYP_OCENA,
+    TYP_UWAGA,
+)
+from .coordinator import LibrusDataUpdateCoordinator
+from .sms import async_powiadom, async_wyslij_na_adresy, parsuj_naglowki, zbuduj_tekst
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _opis_na_slownik(desc: str) -> Dict[str, str]:
+    """Zamien opis oceny z tooltipa Librusa ("Klucz: wartosc" w liniach) na slownik."""
+    wynik: Dict[str, str] = {}
+    for linia in (desc or "").splitlines():
+        if ": " in linia:
+            klucz, wartosc = linia.split(": ", 1)
+            wynik[klucz.strip()] = wartosc.strip()
+    return wynik
 
 
 def _current_semester() -> int:
@@ -31,7 +61,7 @@ def _current_semester() -> int:
     m = date.today().month
     return 1 if m >= 9 else 2
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -56,6 +86,8 @@ class LibrusApiClient:
         self._client: Client = None
         self._token = None
         self._auth_lock = asyncio.Lock()
+        # Oficjalne srednie z Librusa: {przedmiot: {semestr: srednia}} (aktualizowane przy pobraniu ocen)
+        self.averages: Dict[str, Dict[int, Any]] = {}
 
     def _reset_auth(self) -> None:
         """Reset authentication state to force re-authentication on next call."""
@@ -97,6 +129,16 @@ class LibrusApiClient:
                 current_sem = _current_semester()
                 _LOGGER.debug("Filtrowanie ocen dla semestru %d", current_sem)
 
+                # Oficjalne srednie Librusa (Gpa) per przedmiot/semestr
+                try:
+                    srednie: Dict[str, Dict[int, Any]] = {}
+                    for subject, gpa_list in (average_grades or {}).items():
+                        for gpa in gpa_list:
+                            srednie.setdefault(subject, {})[getattr(gpa, "semester", 0)] = getattr(gpa, "gpa", None)
+                    self.averages = srednie
+                except Exception:  # pylint: disable=broad-except
+                    _LOGGER.debug("Nie udalo sie odczytac srednich Librusa", exc_info=True)
+
                 # Process all grades
                 all_grades = []
 
@@ -106,6 +148,7 @@ class LibrusApiClient:
                         for grade in grades_list:
                             if grade.semester != current_sem:
                                 continue
+                            opis = _opis_na_slownik(getattr(grade, 'desc', ''))
                             all_grades.append({
                                 'subject': subject,
                                 'grade': grade.grade,
@@ -113,6 +156,9 @@ class LibrusApiClient:
                                 'category': grade.category,
                                 'teacher': getattr(grade, 'teacher', ''),
                                 'semester': grade.semester,
+                                'weight': getattr(grade, 'weight', 0),
+                                'counts': getattr(grade, 'counts', True),
+                                'comment': opis.get('Komentarz', ''),
                                 'type': 'numeric'
                             })
 
@@ -126,13 +172,21 @@ class LibrusApiClient:
                             if grade_val and (grade_val.replace('+', '').replace('-', '').isdigit() or
                                             grade_val in ['1', '2', '3', '4', '5', '6', '1+', '1-', '2+', '2-',
                                                          '3+', '3-', '4+', '4-', '5+', '5-', '6+', '6-']):
+                                opis = _opis_na_slownik(getattr(desc_grade, 'desc', ''))
+                                try:
+                                    waga = int(opis.get('Waga', 1))
+                                except ValueError:
+                                    waga = 1
                                 all_grades.append({
                                     'subject': subject,
                                     'grade': desc_grade.grade,
                                     'date': desc_grade.date,
-                                    'category': getattr(desc_grade, 'desc', '').split('\n')[0] if hasattr(desc_grade, 'desc') else '',
+                                    'category': opis.get('Kategoria') or (getattr(desc_grade, 'desc', '').split('\n')[0] if hasattr(desc_grade, 'desc') else ''),
                                     'teacher': getattr(desc_grade, 'teacher', ''),
                                     'semester': desc_grade.semester,
+                                    'weight': waga,
+                                    'counts': opis.get('Licz do średniej', 'tak').lower() == 'tak',
+                                    'comment': opis.get('Komentarz', ''),
                                     'type': 'descriptive'
                                 })
 
@@ -303,6 +357,37 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
+    async def async_get_uwagi(self):
+        """Get behaviour notes (uwagi) from Librus. Returns list of dicts or None on error."""
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from .uwagi import pobierz_uwagi
+
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(None, pobierz_uwagi, self._client)
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching uwagi (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get uwagi after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get uwagi (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
     async def async_get_student_information(self):
         """Get student information from Librus."""
         try:
@@ -354,20 +439,132 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Failed to authenticate")
         return False
     
+    # Koordynator wspolny dla wszystkich platform (sensor, button)
+    coordinator = LibrusDataUpdateCoordinator(hass, client, entry)
+    await coordinator.async_load_seen()
+    await coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = client
-    
+    hass.data[DOMAIN][entry.entry_id] = {"client": client, "coordinator": coordinator}
+
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
+    # Zmiana opcji (Konfiguruj) -> przeladuj wpis, zeby nowe ustawienia zadzialaly od razu
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+
+    _async_register_services(hass)
+
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Przeladuj integracje po zmianie opcji."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-    
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+
+    # Ostatni wpis usuniety -> wyrejestruj akcje
+    if not [e for e in hass.config_entries.async_entries(DOMAIN) if e.entry_id in hass.data[DOMAIN]]:
+        if hass.services.has_service(DOMAIN, SERVICE_WYSLIJ_SMS):
+            hass.services.async_remove(DOMAIN, SERVICE_WYSLIJ_SMS)
+
     return unload_ok
+
+
+# ---------------------------------------------------------------- akcja HA
+
+SERVICE_WYSLIJ_SMS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_TYP, default=TYP_OCENA): vol.In([TYP_OCENA, TYP_UWAGA]),
+        vol.Optional("ocena", default=""): cv.string,
+        vol.Optional("przedmiot", default=""): cv.string,
+        vol.Optional("tresc", default=""): cv.string,
+        vol.Optional("rodzaj", default=""): cv.string,
+        vol.Optional("kategoria", default=""): cv.string,
+        vol.Optional("nauczyciel", default=""): cv.string,
+        vol.Optional("data", default=""): cv.string,
+        vol.Optional("waga", default=""): cv.string,
+        vol.Optional("komentarz", default=""): cv.string,
+        vol.Optional("srednia", default=""): cv.string,
+        vol.Optional("uczen"): cv.string,
+        vol.Optional("tekst"): cv.string,
+        vol.Optional(ATTR_URL): cv.string,
+        vol.Optional(ATTR_PUSH, default=False): cv.boolean,
+    }
+)
+
+
+@callback
+def _async_register_services(hass: HomeAssistant) -> None:
+    """Zarejestruj akcje librus_apix.wyslij_sms (raz)."""
+    if hass.services.has_service(DOMAIN, SERVICE_WYSLIJ_SMS):
+        return
+
+    async def _handle_wyslij_sms(call: ServiceCall) -> None:
+        dane: Dict[str, Any] = dict(call.data)
+        typ = dane.pop(ATTR_TYP, TYP_OCENA)
+        url_override = dane.pop(ATTR_URL, None)
+        tekst_override = dane.pop("tekst", None)
+        z_push = dane.pop(ATTR_PUSH, False)
+
+        wpisy = [
+            (entry, hass.data[DOMAIN].get(entry.entry_id) or {})
+            for entry in hass.config_entries.async_entries(DOMAIN)
+            if entry.entry_id in hass.data[DOMAIN]
+        ]
+
+        # Adres podany bezposrednio w akcji - wyslij od razu (SSL/metoda/tekst z pierwszego wpisu)
+        if url_override:
+            verify_ssl = DEFAULT_SMS_VERIFY_SSL
+            metoda = DEFAULT_SMS_METHOD
+            naglowki: Dict[str, str] = {}
+            szablon_tekstu = DEFAULT_SMS_TEKST_OCENY if typ == TYP_OCENA else DEFAULT_SMS_TEKST_UWAGI
+            if wpisy:
+                entry, dane_wpisu = wpisy[0]
+                verify_ssl = entry.options.get(CONF_SMS_VERIFY_SSL, DEFAULT_SMS_VERIFY_SSL)
+                metoda = entry.options.get(CONF_SMS_METHOD, DEFAULT_SMS_METHOD)
+                naglowki = parsuj_naglowki(entry.options.get(CONF_SMS_HEADERS, ""))
+                szablon_tekstu = entry.options.get(
+                    CONF_SMS_TEKST_OCENY if typ == TYP_OCENA else CONF_SMS_TEKST_UWAGI,
+                    szablon_tekstu,
+                )
+                dane.setdefault("uczen", _nazwa_ucznia(dane_wpisu))
+            dane["typ"] = typ
+            dane["tekst"] = tekst_override or zbuduj_tekst(szablon_tekstu, dane)
+            await async_wyslij_na_adresy(hass, url_override, dane, verify_ssl, metoda, naglowki)
+            return
+
+        wyslano = 0
+        for entry, dane_wpisu in wpisy:
+            dane_e = dict(dane)
+            dane_e.setdefault("uczen", _nazwa_ucznia(dane_wpisu))
+            wynik = await async_powiadom(
+                hass, entry.options, typ, dane_e, sms=True, push=z_push, tekst=tekst_override
+            )
+            wyslano += wynik["sms"] + wynik["push"]
+
+        if wyslano == 0:
+            _LOGGER.warning(
+                "librus_apix.wyslij_sms: nic nie wyslano - sprawdz, czy bramka SMS jest wlaczona "
+                "i ma adresy dla typu '%s' (Ustawienia -> Integracje -> Librus -> Konfiguruj)",
+                typ,
+            )
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_WYSLIJ_SMS, _handle_wyslij_sms, schema=SERVICE_WYSLIJ_SMS_SCHEMA
+    )
+
+
+def _nazwa_ucznia(dane_wpisu: Dict[str, Any]) -> str:
+    """Imie i nazwisko ucznia z koordynatora (jesli juz pobrane)."""
+    coordinator = dane_wpisu.get("coordinator")
+    data = getattr(coordinator, "data", None) or {}
+    info = data.get("student_info")
+    return getattr(info, "name", "") or ""
