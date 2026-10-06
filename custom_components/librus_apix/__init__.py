@@ -21,6 +21,21 @@ from .const import DOMAIN, SCAN_INTERVAL
 _LOGGER = logging.getLogger(__name__)
 
 
+def _oznacz_zastapione(oceny):
+    """Librus zapisuje poprawe w nawiasie [stara nowa], a librus-apix zwraca obie jako osobne
+    oceny w kolejnosci z dziennika. Poprawa zastepuje wszystko od ostatniej oceny niebedacej
+    poprawa, wiec poprawa poprawy zastepuje tez poprzednia poprawe."""
+    grupa = []
+    for g in oceny:
+        if g["improvement"]:
+            for p in grupa:
+                p["superseded"] = True
+            grupa.append(g)
+        else:
+            grupa = [g]
+    return oceny
+
+
 def _current_semester() -> int:
     """Zwroc numer biezacego semestru (1 lub 2) wg polskiego roku szkolnego.
 
@@ -103,18 +118,24 @@ class LibrusApiClient:
                 # Process numeric grades (only current semester)
                 for subject_grades in numeric_grades:
                     for subject, grades_list in subject_grades.items():
+                        biezace = []
                         for grade in grades_list:
                             if grade.semester != current_sem:
                                 continue
-                            all_grades.append({
+                            biezace.append({
                                 'subject': subject,
                                 'grade': grade.grade,
                                 'date': grade.date,
                                 'category': grade.category,
                                 'teacher': getattr(grade, 'teacher', ''),
                                 'semester': grade.semester,
-                                'type': 'numeric'
+                                'type': 'numeric',
+                                'weight': grade.weight,
+                                'counts': grade.counts,
+                                'improvement': 'Poprawa oceny' in (grade.desc or ''),
+                                'superseded': False,
                             })
+                        all_grades.extend(_oznacz_zastapione(biezace))
 
                 # Process descriptive grades (only current semester, many are actually numeric)
                 for subject_grades in descriptive_grades:

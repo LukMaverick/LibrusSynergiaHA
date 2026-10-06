@@ -41,9 +41,12 @@ def _jest_nowa(date_str: str) -> bool:
 
 
 def _srednia_ocen(oceny: List[Dict]) -> Optional[float]:
-    """Oblicz srednia ocen z listy ocen."""
-    wartosci = []
+    """Srednia wazona ocen; pomija oceny zastapione poprawa i te z 'Licz do sredniej: nie'."""
+    suma = 0.0
+    suma_wag = 0
     for g in oceny:
+        if g.get("zastapiona") or g.get("licz_do_sredniej") is False:
+            continue
         grade_str = g.get("ocena", "")
         try:
             base = float(grade_str[0])
@@ -52,10 +55,12 @@ def _srednia_ocen(oceny: List[Dict]) -> Optional[float]:
                     base += 0.5
                 elif "-" in grade_str:
                     base -= 0.25
-            wartosci.append(base)
         except (ValueError, IndexError):
             continue
-    return round(sum(wartosci) / len(wartosci), 2) if wartosci else None
+        waga = g.get("waga") or 1
+        suma += base * waga
+        suma_wag += waga
+    return round(suma / suma_wag, 2) if suma_wag else None
 
 
 async def async_setup_entry(
@@ -165,6 +170,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                     "nauczyciel": grade["teacher"],
                     "semestr": grade.get("semester"),
                     "jest_nowa": _jest_nowa(grade["date"]),
+                    "waga": grade.get("weight", 1),
+                    "licz_do_sredniej": grade.get("counts", True),
+                    "poprawa": grade.get("improvement", False),
+                    "zastapiona": grade.get("superseded", False),
                 })
 
             wiadomosci = self._build_wiadomosci(messages)
@@ -552,6 +561,7 @@ class LibrusSredniaPrzedmiotuSensor(CoordinatorEntity, SensorEntity):
             "przedmiot": self._subject,
             "lista_ocen": ", ".join(g["ocena"] for g in oceny),
             "liczba_ocen": len(oceny),
+            "liczba_ocen_do_sredniej": sum(1 for g in oceny if not g.get("zastapiona")),
         }
 
 

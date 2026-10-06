@@ -28,6 +28,8 @@ Integracja tworzy następujące sensory:
 
 Sensory średnich mają `state_class: measurement` — HA automatycznie rysuje dla nich wykres historyczny po kliknięciu w encję.
 
+Średnie są ważone wagą oceny z Librusa i pomijają oceny z „Licz do średniej: nie” oraz oceny zastąpione poprawą. W atrybucie `oceny_wg_przedmiotu` każda ocena ma pola `waga`, `licz_do_sredniej`, `poprawa` i `zastapiona`.
+
 ## 📦 Instalacja
 
 ### Opcja 1: HACS (Zalecana)
