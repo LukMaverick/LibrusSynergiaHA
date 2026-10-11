@@ -8,13 +8,17 @@ from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
 )
 
-from .const import DOMAIN, SCAN_INTERVAL
+from homeassistant.util import dt as dt_util
+
+from .const import DOMAIN, SCAN_INTERVAL, TYPY_SPRAWDZIAN, VERSION
+from .terminarz import klasyfikuj, parsuj_szczegoly, podsumowanie, wzbogac_terminarz
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,6 +80,7 @@ async def async_setup_entry(
         LibrusWiadomosciSensor(coordinator, config_entry),
         LibrusZadaniaSensor(coordinator, config_entry),
         LibrusTerminarzSensor(coordinator, config_entry),
+        LibrusSprawdzianySensor(coordinator, config_entry),
     ]
 
     # Tworz czujniki per przedmiot na podstawie pierwszego pobrania danych
@@ -249,6 +254,10 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             ev_id = (zdarzenie["data"], zdarzenie["tytul"], zdarzenie["przedmiot"])
             if ev_id not in self._seen_schedule_ids:
                 self._seen_schedule_ids.add(ev_id)
+                typ = klasyfikuj(
+                    f"{zdarzenie['tytul']} {zdarzenie['przedmiot']} "
+                    f"{parsuj_szczegoly(zdarzenie.get('szczegoly'))[1] or ''}"
+                )
                 _LOGGER.debug("Nowe zdarzenie: %s %s %s", zdarzenie["data"], zdarzenie["przedmiot"], zdarzenie["tytul"])
                 self.hass.bus.fire(
                     EVENT_NOWE_ZDARZENIE,
@@ -257,6 +266,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         "tytul": zdarzenie["tytul"],
                         "przedmiot": zdarzenie["przedmiot"],
                         "godzina": zdarzenie["godzina"],
+                        "typ": typ,
+                        "wazne": typ in TYPY_SPRAWDZIAN,
                     },
                 )
 
@@ -555,29 +566,53 @@ class LibrusSredniaPrzedmiotuSensor(CoordinatorEntity, SensorEntity):
         }
 
 
-class LibrusTerminarzSensor(CoordinatorEntity, SensorEntity):
-    """Czujnik z nadchodzacymi zdarzeniami z kalendarza Librusa (biezacy + nastepny miesiac)."""
+def _terminarz_wzbogacony(coordinator: Any) -> List[Dict[str, Any]]:
+    """Terminarz z koordynatora: tylko przyszle zdarzenia (wg czasu HA) z polami typ, dni_do itd."""
+    surowy = (coordinator.data or {}).get("terminarz", [])
+    return wzbogac_terminarz(surowy, dt_util.now().date())
+
+
+class _TerminarzBaza(CoordinatorEntity, SensorEntity):
+    """Wspolna baza: odswiezenie stanu o polnocy, zeby dni_do i lista byly aktualne."""
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
-        """Inicjalizacja."""
         super().__init__(coordinator)
         self._config_entry = config_entry
         self._attr_has_entity_name = False
-        self._attr_name = "Terminarz"
-        self._attr_unique_id = f"{config_entry.entry_id}_terminarz"
-        self._attr_icon = "mdi:calendar-month"
 
     @property
     def device_info(self) -> Dict[str, Any]:
         return _device_info(self.coordinator, self._config_entry)
 
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, lambda _now: self.async_write_ha_state(), hour=0, minute=0, second=5
+            )
+        )
+
+
+class LibrusTerminarzSensor(_TerminarzBaza):
+    """Czujnik z nadchodzacymi zdarzeniami z kalendarza Librusa (biezacy + nastepny miesiac)."""
+
+    # Lista jest duza i nie ma wartosci historycznej (limit 16 KB atrybutow w rekorderze)
+    _unrecorded_attributes = frozenset({"zdarzenia", "sprawdziany_7_dni"})
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator, config_entry)
+        self._attr_name = "Terminarz"
+        self._attr_unique_id = f"{config_entry.entry_id}_terminarz"
+        self._attr_icon = "mdi:calendar-month"
+
     @property
     def native_value(self) -> int:
-        return len((self.coordinator.data or {}).get("terminarz", []))
+        return len(_terminarz_wzbogacony(self.coordinator))
 
     @property
     def extra_state_attributes(self) -> Dict[str, Any]:
-        terminarz = (self.coordinator.data or {}).get("terminarz", [])
+        terminarz = _terminarz_wzbogacony(self.coordinator)
         typy: Dict[str, int] = {}
         for z in terminarz:
             t = z.get("tytul", "")
@@ -586,6 +621,36 @@ class LibrusTerminarzSensor(CoordinatorEntity, SensorEntity):
             "zdarzenia": terminarz,
             "liczba_zdarzen": len(terminarz),
             "typy": typy,
+            **podsumowanie(terminarz),
+            "zakres_do": terminarz[-1]["data"] if terminarz else None,
+            "wersja_integracji": VERSION,
+        }
+
+
+class LibrusSprawdzianySensor(_TerminarzBaza):
+    """Liczba sprawdzianow i kartkowek w ciagu 7 dni - do odznak i automatyzacji."""
+
+    _unrecorded_attributes = frozenset({"lista"})
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        super().__init__(coordinator, config_entry)
+        self._attr_name = "Sprawdziany"
+        self._attr_unique_id = f"{config_entry.entry_id}_sprawdziany"
+        self._attr_icon = "mdi:file-document-edit"
+
+    def _podsumowanie(self) -> Dict[str, Any]:
+        return podsumowanie(_terminarz_wzbogacony(self.coordinator))
+
+    @property
+    def native_value(self) -> int:
+        return self._podsumowanie()["liczba_sprawdzianow_7_dni"]
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        p = self._podsumowanie()
+        return {
+            "najblizszy": p["najblizszy_sprawdzian"],
+            "lista": p["sprawdziany_7_dni"],
         }
 
 

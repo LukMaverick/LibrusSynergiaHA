@@ -1,0 +1,9 @@
+[
+  {"data": "2026-10-13", "tytul": "Sprawdzian", "przedmiot": "Matematyka", "godzina": "unknown", "numer_lekcji": 2, "szczegoly": {"Opis": "Ułamki"}, "href": "t1"},
+  {"data": "2026-10-13", "tytul": "Kartkówka", "przedmiot": "Język polski", "godzina": "unknown", "numer_lekcji": "15", "szczegoly": {}, "href": "t2"},
+  {"data": "2026-10-14", "tytul": "Wycieczka klasowa do muzeum", "przedmiot": "unspecified", "godzina": "unknown", "numer_lekcji": "unknown", "szczegoly": {"Opis": "unknown"}, "href": "t3"},
+  {"data": "2026-10-15", "tytul": "Dzień wolny od zajęć dydaktycznych", "przedmiot": "unspecified", "godzina": "unknown", "numer_lekcji": "unknown", "szczegoly": {}, "href": "t4"},
+  {"data": "2026-10-16", "tytul": "Rada pedagogiczna", "przedmiot": "unspecified", "godzina": "unknown", "numer_lekcji": "unknown", "szczegoly": {}, "href": "t5"},
+  {"data": "2026-10-16", "tytul": "Kartkówka", "przedmiot": "Biologia", "godzina": "unknown", "numer_lekcji": 5, "szczegoly": {}, "href": "t6"},
+  {"data": "2026-10-13", "tytul": "Lekcja odwołana", "przedmiot": "Wychowanie fizyczne", "godzina": "unknown", "numer_lekcji": "unknown", "szczegoly": {}, "href": "t7"}
+]

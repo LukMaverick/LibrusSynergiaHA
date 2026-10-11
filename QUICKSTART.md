@@ -40,6 +40,12 @@ docker-compose logs -f homeassistant
 6. Podaj swoje dane logowania do Librus
 7. Ciesz się nowymi sensorami! 🎉
 
+## Karta terminarza
+
+Karta `custom:librus-terminarz-card` rejestruje się automatycznie przy starcie. Po aktualizacji odśwież stronę
+(Ctrl+Shift+R). W trybie YAML dodaj zasób `/librus_apix_static/librus-terminarz-card.js` (`type: module`).
+Podgląd bez HA: `python3 -m http.server`, potem `custom_components/librus_apix/frontend/demo-terminarz.html`.
+
 ## Zatrzymanie
 
 ```bash

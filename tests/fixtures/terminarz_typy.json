@@ -1,0 +1,22 @@
+[
+  {"tytul": "Sprawdzian", "przedmiot": "Matematyka", "opis": "Ułamki", "typ": "sprawdzian"},
+  {"tytul": "Kartkówka", "przedmiot": "Język polski", "opis": "", "typ": "kartkowka"},
+  {"tytul": "KARTKÓWKA Z LEKTURY", "przedmiot": "unspecified", "opis": "", "typ": "kartkowka"},
+  {"tytul": "Praca klasowa", "przedmiot": "Historia", "opis": "", "typ": "sprawdzian"},
+  {"tytul": "Klasówka", "przedmiot": "Fizyka", "opis": "", "typ": "sprawdzian"},
+  {"tytul": "Test diagnostyczny", "przedmiot": "Angielski", "opis": "", "typ": "sprawdzian"},
+  {"tytul": "Kartkówka odwołana", "przedmiot": "Biologia", "opis": "", "typ": "odwolane"},
+  {"tytul": "Lekcja odwołana", "przedmiot": "Wychowanie fizyczne", "opis": "", "typ": "odwolane"},
+  {"tytul": "Dzień wolny od zajęć dydaktycznych", "przedmiot": "unspecified", "opis": "", "typ": "dzien_wolny"},
+  {"tytul": "Dzień dyrektorski", "przedmiot": "unspecified", "opis": "", "typ": "dzien_wolny"},
+  {"tytul": "Ferie zimowe", "przedmiot": "unspecified", "opis": "", "typ": "dzien_wolny"},
+  {"tytul": "Wycieczka klasowa do muzeum", "przedmiot": "unspecified", "opis": "", "typ": "wycieczka"},
+  {"tytul": "Wyjście do kina", "przedmiot": "unspecified", "opis": "", "typ": "wycieczka"},
+  {"tytul": "Rada pedagogiczna", "przedmiot": "unspecified", "opis": "", "typ": "rada"},
+  {"tytul": "Zebranie z rodzicami", "przedmiot": "unspecified", "opis": "", "typ": "zebranie"},
+  {"tytul": "Wywiadówka", "przedmiot": "unspecified", "opis": "", "typ": "zebranie"},
+  {"tytul": "Konkurs szkolny", "przedmiot": "unspecified", "opis": "", "typ": "inne"},
+  {"tytul": "Lekcja", "przedmiot": "Biologia", "opis": "Wolne miejsca w sali", "typ": "inne"},
+  {"tytul": "Zajęcia", "przedmiot": "Informatyka", "opis": "Atestowanie sprzętu", "typ": "inne"},
+  {"tytul": "Lekcja", "przedmiot": "Matematyka", "opis": "Powtórzenie przed sprawdzianem", "typ": "sprawdzian"}
+]

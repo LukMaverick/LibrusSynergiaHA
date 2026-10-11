@@ -14,9 +14,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 
 from librus_apix.client import Client, new_client
-from librus_apix.exceptions import TokenError
+from librus_apix.exceptions import ParseError, TokenError
+
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, SCAN_INTERVAL
+from .karta import async_register_frontend
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -253,7 +256,7 @@ class LibrusApiClient:
                 from datetime import date as _date
                 import calendar
 
-                today = _date.today()
+                today = dt_util.now().date()
                 loop = asyncio.get_running_loop()
 
                 def _fetch_two_months():
@@ -265,7 +268,11 @@ class LibrusApiClient:
                             1 if today.month == 12 else today.month + 1,
                         ),
                     ]:
-                        monthly = get_schedule(self._client, str(month).zfill(2), str(year))
+                        try:
+                            monthly = get_schedule(self._client, str(month).zfill(2), str(year))
+                        except ParseError:
+                            # Pusty/niedostepny miesiac nie moze psuc calego terminarza
+                            continue
                         for day_num, day_events in monthly.items():
                             event_date = _date(year, month, int(day_num))
                             if event_date < today:

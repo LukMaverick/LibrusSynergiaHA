@@ -229,6 +229,58 @@ severity:
   red: 0
 ```
 
+### 🗓️ Karta terminarza (`librus-terminarz-card`)
+
+Własna karta Lovelace dostarczana razem z integracją: terminarz pogrupowany po dniach (Dziś / Jutro / Środa, 14 paź),
+z ikonami typów, wyróżnionymi sprawdzianami, chipsami filtrów, podsumowaniem „2 sprawdziany w ciągu 7 dni” i widokiem miesiąca.
+
+Karta rejestruje się sama (zasób `/librus_apix_static/librus-terminarz-card.js` w trybie storage). W trybie YAML dodaj zasób ręcznie:
+
+```yaml
+lovelace:
+  resources:
+    - url: /librus_apix_static/librus-terminarz-card.js
+      type: module
+```
+
+```yaml
+type: custom:librus-terminarz-card
+entity: sensor.terminarz     # puste = wykryj automatycznie
+tytul: Terminarz
+widok: agenda                # agenda | miesiac
+dni: 30                      # horyzont agendy
+typy: [sprawdzian, kartkowka]  # opcjonalnie: sprawdzian, kartkowka, dzien_wolny, wycieczka, odwolane, rada, zebranie, inne
+filtry: true                 # chipsy filtrów
+kompakt: false               # jedna linia na zdarzenie
+pokaz_opis: true
+pokaz_nauczyciela: false
+max_zdarzen: 0               # 0 = bez limitu
+```
+
+Jedna karta = jeden uczeń (jedna encja). Dla kilkorga dzieci dodaj osobne karty z różnym `entity`.
+Karta ma też edytor wizualny. Podgląd bez Home Assistanta: `custom_components/librus_apix/frontend/demo-terminarz.html`
+(`python3 -m http.server`).
+
+Sensor `Terminarz` ma teraz dodatkowe atrybuty (dotychczasowe `zdarzenia`, `liczba_zdarzen`, `typy` bez zmian):
+`typ`, `ikona`, `wazne`, `dni_do`, `dzien_tygodnia`, `nauczyciel`, `opis` w każdym zdarzeniu oraz
+`typy_zdarzen`, `liczba_sprawdzianow_7_dni`, `najblizszy_sprawdzian`, `zakres_do`.
+Nowy sensor `Sprawdziany` (stan = liczba sprawdzianów i kartkówek w 7 dni) nadaje się do odznak i automatyzacji:
+
+```yaml
+trigger:
+  - platform: time
+    at: "18:00:00"
+condition:
+  - condition: template
+    value_template: "{{ state_attr('sensor.terminarz', 'najblizszy_sprawdzian').dni_do == 1 }}"
+action:
+  - service: notify.mobile_app_telefon
+    data:
+      message: "Jutro sprawdzian: {{ state_attr('sensor.terminarz', 'najblizszy_sprawdzian').przedmiot }}"
+```
+
+Zdarzenie `librus_apix_nowe_zdarzenie` ma teraz dodatkowo pola `typ` i `wazne`.
+
 ## 🔔 Automatyzacje powiadomień na telefon
 
 Integracja wysyła zdarzenia Home Assistant gdy pojawi się nowa wiadomość lub ocena.
