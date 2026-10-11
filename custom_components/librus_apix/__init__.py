@@ -241,6 +241,69 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
+    @staticmethod
+    def _fetch_attendance(client):
+        """Pobierz nieobecnosci i procent frekwencji (blokujace, do executora)."""
+        from librus_apix.attendance import get_attendance, get_attendance_frequency
+
+        semestry = get_attendance(client)
+        sem1, sem2, calosc = get_attendance_frequency(client)
+        # Pozycja na liscie = numer semestru (biblioteka sama porzadkuje kolejnosc)
+        wpisy = [(nr, wpis) for nr, semestr in enumerate(semestry, 1) for wpis in semestr]
+        return wpisy, {
+            "semestr_1": round(sem1 * 100, 2),
+            "semestr_2": round(sem2 * 100, 2),
+            "calosc": round(calosc * 100, 2),
+        }
+
+    async def async_get_attendance(self):
+        """Get attendance records (all semesters) and attendance frequency."""
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                loop = asyncio.get_running_loop()
+                wpisy, frekwencja = await loop.run_in_executor(
+                    None, self._fetch_attendance, self._client
+                )
+                return {
+                    "wpisy": [
+                        {
+                            "symbol": w.symbol.strip().lower(),
+                            "typ": w.type,
+                            "data": w.date,
+                            "numer_lekcji": w.period,
+                            "przedmiot": w.subject,
+                            "nauczyciel": w.teacher,
+                            "temat": w.topic,
+                            "semestr": nr,
+                            "href": w.href,
+                        }
+                        for nr, w in wpisy
+                    ],
+                    "frekwencja": frekwencja,
+                }
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching attendance (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get attendance after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get attendance (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
     async def async_get_schedule(self):
         """Get upcoming calendar events from Librus (current + next month, filtered to future dates)."""
         for attempt in range(2):

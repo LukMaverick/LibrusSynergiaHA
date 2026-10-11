@@ -23,6 +23,8 @@ Integracja tworzy następujące sensory:
 | `sensor.librus_oceny` | Wszystkie oceny bieżącego semestru | liczba ocen |
 | `sensor.librus_srednia_ocen` | **Globalna średnia** ze wszystkich przedmiotów | float (wykres 📈) |
 | `sensor.librus_wiadomosci` | Ostatnie 5 wiadomości z pełną treścią | liczba nieprzeczytanych |
+| `sensor.librus_frekwencja` | **Frekwencja** w procentach (całość; atrybuty `semestr_1`, `semestr_2`) | float % (wykres 📈) |
+| `sensor.librus_nieobecnosci` | Liczba nieobecności (atrybuty: `usprawiedliwione`, `nieusprawiedliwione`, `lista` ostatnich 30) | liczba nieobecności |
 | `sensor.librus_<przedmiot>` | Oceny z danego przedmiotu (np. `sensor.librus_matematyka`) | lista ocen: "4, 3+, 5" |
 | `sensor.librus_srednia_<przedmiot>` | **Średnia** z danego przedmiotu (np. `sensor.librus_srednia_matematyka`) | float (wykres 📈) |
 
@@ -282,6 +284,29 @@ automation:
             Ocena: {{ trigger.event.data.ocena }}
             Kategoria: {{ trigger.event.data.kategoria }}
             Nauczyciel: {{ trigger.event.data.nauczyciel }}
+```
+
+### 🚫 Powiadomienie o nowej nieobecności
+
+Zdarzenie: `librus_apix_nowa_nieobecnosc`  
+Dostępne dane: `data`, `przedmiot`, `numer_lekcji`, `typ`, `usprawiedliwiona`, `nauczyciel`, `temat`
+
+Zdarzenie dotyczy nieobecności (oznaczenia `nb` i `u` w dzienniku) — spóźnienia i zwolnienia go nie wywołują. Samo usprawiedliwienie wcześniej zgłoszonej nieobecności nie jest nową nieobecnością.
+
+```yaml
+automation:
+  - alias: "Librus - nowa nieobecnosc"
+    trigger:
+      platform: event
+      event_type: librus_apix_nowa_nieobecnosc
+    action:
+      - service: notify.mobile_app_NAZWA_TWOJEGO_TELEFONU
+        data:
+          title: "🚫 Librus: nowa nieobecność"
+          message: >-
+            {{ trigger.event.data.data }}, lekcja {{ trigger.event.data.numer_lekcji }}:
+            {{ trigger.event.data.przedmiot }}
+            ({{ 'usprawiedliwiona' if trigger.event.data.usprawiedliwiona else 'nieusprawiedliwiona' }})
 ```
 
 > **Gdzie znaleźć nazwę telefonu?** HA → Settings → Devices & Services → Mobile App → nazwa urządzenia (np. `notify.mobile_app_samsung_galaxy_s24`)

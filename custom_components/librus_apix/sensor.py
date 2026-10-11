@@ -76,6 +76,8 @@ async def async_setup_entry(
         LibrusWiadomosciSensor(coordinator, config_entry),
         LibrusZadaniaSensor(coordinator, config_entry),
         LibrusTerminarzSensor(coordinator, config_entry),
+        LibrusFrekwencjaSensor(coordinator, config_entry),
+        LibrusNieobecnosciSensor(coordinator, config_entry),
     ]
 
     # Tworz czujniki per przedmiot na podstawie pierwszego pobrania danych
@@ -93,6 +95,18 @@ EVENT_NOWA_WIADOMOSC = f"{DOMAIN}_nowa_wiadomosc"
 EVENT_NOWA_OCENA = f"{DOMAIN}_nowa_ocena"
 EVENT_NOWE_ZADANIE = f"{DOMAIN}_nowe_zadanie"
 EVENT_NOWE_ZDARZENIE = f"{DOMAIN}_nowe_zdarzenie"
+EVENT_NOWA_NIEOBECNOSC = f"{DOMAIN}_nowa_nieobecnosc"
+
+# Symbole z dziennika: nb = nieobecnosc, u = nieobecnosc usprawiedliwiona
+SYMBOLE_NIEOBECNOSCI = {"nb", "u"}
+SYMBOL_USPRAWIEDLIWIONA = "u"
+
+
+def _klucz_nieobecnosci(wpis: Dict) -> Any:
+    """Klucz identyfikujacy nieobecnosc (niezalezny od statusu usprawiedliwienia)."""
+    return wpis.get("href") or (
+        wpis.get("data"), wpis.get("numer_lekcji"), wpis.get("przedmiot")
+    )
 
 
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
@@ -105,6 +119,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
         self._seen_grade_ids: set = set()
         self._seen_homework_ids: set = set()
         self._seen_schedule_ids: set = set()
+        self._seen_absence_ids: set = set()
+        self._attendance_seeded: bool = False
         self._first_run: bool = True
         super().__init__(
             hass,
@@ -124,6 +140,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             messages = await self.client.async_get_messages(count=10)
             homework_raw = await self.client.async_get_homework()
             schedule_raw = await self.client.async_get_schedule()
+            attendance_raw = await self.client.async_get_attendance()
+            frekwencja = self._build_frekwencja(attendance_raw)
 
             if grades is None:
                 # Zachowaj poprzednie dane o ocenach jesli dostepne, wiadomosci zaktualizuj jesli OK
@@ -150,6 +168,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         if schedule_raw is not None
                         else prev.get("terminarz", [])
                     ),
+                    "frekwencja": frekwencja,
+                    "semestr_biezacy": current_sem,
                 }
 
             # Grupuj oceny wg przedmiotu i oznacz nowe
@@ -178,6 +198,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                 "wiadomosci": wiadomosci,
                 "zadania": zadania,
                 "terminarz": terminarz,
+                "frekwencja": frekwencja,
                 "semestr_biezacy": current_sem,
             }
 
@@ -202,6 +223,16 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                 self._fire_events(wiadomosci, grades)
                 self._fire_homework_events(zadania)
                 self._fire_schedule_events(terminarz)
+
+            # Nieobecnosci maja wlasny seed - gdy pierwsze pobranie frekwencji sie
+            # nie powiodlo, stare nieobecnosci nie moga zostac ogloszone jako nowe
+            if attendance_raw is not None:
+                if not self._attendance_seeded:
+                    self._attendance_seeded = True
+                    for wpis in frekwencja["nieobecnosci"]:
+                        self._seen_absence_ids.add(_klucz_nieobecnosci(wpis))
+                else:
+                    self._fire_absence_events(frekwencja["nieobecnosci"])
 
             return result
 
@@ -257,6 +288,50 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         "tytul": zdarzenie["tytul"],
                         "przedmiot": zdarzenie["przedmiot"],
                         "godzina": zdarzenie["godzina"],
+                    },
+                )
+
+    def _build_frekwencja(self, attendance_raw: Optional[Dict]) -> Dict[str, Any]:
+        """Przetworz dane frekwencji; przy bledzie pobierania zachowaj poprzednie."""
+        if attendance_raw is None:
+            prev = (self.data or {}).get("frekwencja")
+            if prev:
+                return prev
+            return {"procent": {}, "nieobecnosci": []}
+        nieobecnosci = [
+            {
+                **wpis,
+                "usprawiedliwiona": wpis["symbol"] == SYMBOL_USPRAWIEDLIWIONA,
+            }
+            for wpis in attendance_raw["wpisy"]
+            if wpis["symbol"] in SYMBOLE_NIEOBECNOSCI
+        ]
+        # Najnowsze pierwsze (format daty RRRR-MM-DD sortuje sie leksykograficznie)
+        nieobecnosci.sort(
+            key=lambda w: (w["data"], w["numer_lekcji"]), reverse=True
+        )
+        return {
+            "procent": attendance_raw["frekwencja"],
+            "nieobecnosci": nieobecnosci,
+        }
+
+    def _fire_absence_events(self, nieobecnosci: List[Dict]) -> None:
+        """Wyslij zdarzenia HA dla nowych nieobecnosci."""
+        for wpis in nieobecnosci:
+            klucz = _klucz_nieobecnosci(wpis)
+            if klucz not in self._seen_absence_ids:
+                self._seen_absence_ids.add(klucz)
+                _LOGGER.debug("Nowa nieobecnosc: %s %s", wpis["data"], wpis["przedmiot"])
+                self.hass.bus.fire(
+                    EVENT_NOWA_NIEOBECNOSC,
+                    {
+                        "data": wpis["data"],
+                        "przedmiot": wpis["przedmiot"],
+                        "numer_lekcji": wpis["numer_lekcji"],
+                        "typ": wpis["typ"],
+                        "usprawiedliwiona": wpis["usprawiedliwiona"],
+                        "nauczyciel": wpis["nauczyciel"],
+                        "temat": wpis["temat"],
                     },
                 )
 
@@ -662,4 +737,88 @@ class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
             ],
             "liczba_nieprzeczytanych": sum(1 for m in msgs if m.get("unread", False)),
             "sa_nowe_wiadomosci": any(m.get("jest_nowa", False) for m in msgs),
+        }
+
+
+class LibrusFrekwencjaSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik procentowej frekwencji."""
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_has_entity_name = False
+        self._attr_name = "Frekwencja"
+        self._attr_unique_id = f"{config_entry.entry_id}_frekwencja"
+        self._attr_icon = "mdi:calendar-check-outline"
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        """Informacje o urzadzeniu."""
+        return _device_info(self.coordinator, self._config_entry)
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Frekwencja calkowita w procentach."""
+        procent = ((self.coordinator.data or {}).get("frekwencja") or {}).get("procent", {})
+        return procent.get("calosc")
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Frekwencja w podziale na semestry."""
+        procent = ((self.coordinator.data or {}).get("frekwencja") or {}).get("procent", {})
+        return {
+            "semestr_1": procent.get("semestr_1"),
+            "semestr_2": procent.get("semestr_2"),
+        }
+
+
+class LibrusNieobecnosciSensor(CoordinatorEntity, SensorEntity):
+    """Czujnik liczby nieobecnosci."""
+
+    MAX_LISTA = 30
+
+    def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Inicjalizacja."""
+        super().__init__(coordinator)
+        self._config_entry = config_entry
+        self._attr_has_entity_name = False
+        self._attr_name = "Nieobecności"
+        self._attr_unique_id = f"{config_entry.entry_id}_nieobecnosci"
+        self._attr_icon = "mdi:account-off-outline"
+
+    @property
+    def device_info(self) -> Dict[str, Any]:
+        """Informacje o urzadzeniu."""
+        return _device_info(self.coordinator, self._config_entry)
+
+    def _nieobecnosci(self) -> List[Dict]:
+        return ((self.coordinator.data or {}).get("frekwencja") or {}).get("nieobecnosci", [])
+
+    @property
+    def native_value(self) -> int:
+        """Liczba nieobecnosci (usprawiedliwionych i nie)."""
+        return len(self._nieobecnosci())
+
+    @property
+    def extra_state_attributes(self) -> Dict[str, Any]:
+        """Podzial wg usprawiedliwienia i lista ostatnich nieobecnosci."""
+        lista = self._nieobecnosci()
+        usprawiedliwione = sum(1 for w in lista if w["usprawiedliwiona"])
+        return {
+            "usprawiedliwione": usprawiedliwione,
+            "nieusprawiedliwione": len(lista) - usprawiedliwione,
+            "lista": [
+                {
+                    "data": w["data"],
+                    "przedmiot": w["przedmiot"],
+                    "numer_lekcji": w["numer_lekcji"],
+                    "typ": w["typ"],
+                    "usprawiedliwiona": w["usprawiedliwiona"],
+                    "nauczyciel": w["nauczyciel"],
+                }
+                for w in lista[: self.MAX_LISTA]
+            ],
         }
