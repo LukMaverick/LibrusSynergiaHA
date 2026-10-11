@@ -3,20 +3,34 @@
 import asyncio
 import logging
 import traceback
-from datetime import date
-from typing import Dict, Any
+from datetime import date, datetime, timedelta
+from typing import Dict, Any, Optional
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from librus_apix.client import Client, new_client
-from librus_apix.exceptions import TokenError
+from librus_apix.exceptions import ParseError, TokenError
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    SCAN_INTERVAL,
+    ZADANIA_NAPRZOD_DNI,
+    ZADANIA_WSTECZ_DNI,
+)
+from .karta import async_register_frontend
+from .plan import normalizuj_tydzien, poniedzialek
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -203,8 +217,11 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
-    async def async_get_homework(self):
-        """Get upcoming homework assignments from Librus (next 30 days)."""
+    async def async_get_homework(self, od: Optional[date] = None, do: Optional[date] = None):
+        """Get homework assignments from Librus (default: 7 days back to 30 days ahead)."""
+        today = dt_util.now().date()
+        od = od or today - timedelta(days=ZADANIA_WSTECZ_DNI)
+        do = do or today + timedelta(days=ZADANIA_NAPRZOD_DNI)
         for attempt in range(2):
             try:
                 if not self._client or not self._token:
@@ -212,15 +229,14 @@ class LibrusApiClient:
                         return None
 
                 from librus_apix.homework import get_homework
-                from datetime import date as _date, timedelta
-
-                today = _date.today()
-                date_from = today.strftime("%Y-%m-%d")
-                date_to = (today + timedelta(days=30)).strftime("%Y-%m-%d")
 
                 loop = asyncio.get_running_loop()
                 return await loop.run_in_executor(
-                    None, get_homework, self._client, date_from, date_to
+                    None,
+                    get_homework,
+                    self._client,
+                    od.strftime("%Y-%m-%d"),
+                    do.strftime("%Y-%m-%d"),
                 )
 
             except TokenError:
@@ -232,6 +248,11 @@ class LibrusApiClient:
                 if attempt == 1:
                     _LOGGER.error("Failed to get homework after re-authentication.")
                     return None
+            except ParseError as ex:
+                # Biblioteka nie odroznia pustej tabeli od zmiany HTML - koordynator zachowa
+                # poprzednie dane, a po 24 h zalozy brak zadan
+                _LOGGER.debug("Homework ParseError: %s", ex)
+                return None
             except Exception as ex:
                 _LOGGER.error(
                     "Failed to get homework (attempt %d/2): %s\n%s",
@@ -241,8 +262,47 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
-    async def async_get_schedule(self):
-        """Get upcoming calendar events from Librus (current + next month, filtered to future dates)."""
+    async def async_get_homework_detail(self, href: str):
+        """Get homework details (label -> value) or None on failure."""
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.homework import homework_detail
+
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(
+                    None, homework_detail, self._client, href
+                )
+
+            except TokenError:
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+            except Exception as ex:
+                _LOGGER.debug("Failed to get homework detail %s: %s", href, ex)
+                return None
+
+    async def async_get_schedule(self, od: Optional[date] = None, do: Optional[date] = None):
+        """Get calendar events from Librus.
+
+        Domyslnie: od poniedzialku biezacego tygodnia do konca nastepnego miesiaca.
+        Miesiac bez zdarzen (ParseError z biblioteki) traktujemy jako pusty.
+        """
+        today = dt_util.now().date()
+        od = od or poniedzialek(today)
+        if do is None:
+            nast = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+            do = (nast.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+
+        miesiace = []
+        cur = od.replace(day=1)
+        while cur <= do:
+            miesiace.append((cur.year, cur.month))
+            cur = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
+
         for attempt in range(2):
             try:
                 if not self._client or not self._token:
@@ -250,25 +310,20 @@ class LibrusApiClient:
                         return None
 
                 from librus_apix.schedule import get_schedule
-                from datetime import date as _date
-                import calendar
+                from librus_apix.exceptions import ParseError
 
-                today = _date.today()
                 loop = asyncio.get_running_loop()
 
-                def _fetch_two_months():
+                def _fetch_months():
                     events = []
-                    for year, month in [
-                        (today.year, today.month),
-                        (
-                            today.year + 1 if today.month == 12 else today.year,
-                            1 if today.month == 12 else today.month + 1,
-                        ),
-                    ]:
-                        monthly = get_schedule(self._client, str(month).zfill(2), str(year))
+                    for year, month in miesiace:
+                        try:
+                            monthly = get_schedule(self._client, str(month).zfill(2), str(year))
+                        except ParseError:
+                            continue
                         for day_num, day_events in monthly.items():
-                            event_date = _date(year, month, int(day_num))
-                            if event_date < today:
+                            event_date = date(year, month, int(day_num))
+                            if event_date < od or event_date > do:
                                 continue
                             for ev in day_events:
                                 events.append({
@@ -283,7 +338,7 @@ class LibrusApiClient:
                                 })
                     return sorted(events, key=lambda e: e["data"])
 
-                return await loop.run_in_executor(None, _fetch_two_months)
+                return await loop.run_in_executor(None, _fetch_months)
 
             except TokenError:
                 _LOGGER.warning(
@@ -297,6 +352,69 @@ class LibrusApiClient:
             except Exception as ex:
                 _LOGGER.error(
                     "Failed to get schedule (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
+    async def async_get_timetable(self, start: Optional[date] = None, weeks: int = 2):
+        """Get the lesson plan for `weeks` weeks from the Monday of `start`'s week.
+
+        Zwraca {"dni": {iso: [lekcje]}, "godziny": {...}, "braki": [poniedzialki]} albo None,
+        gdy nie udalo sie pobrac zadnego tygodnia. Tydzien bez planu (ParseError, np. ferie)
+        to puste dni, a nie blad.
+        """
+        start = poniedzialek(start or dt_util.now().date())
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.timetable import get_timetable
+                from librus_apix.exceptions import ParseError
+
+                loop = asyncio.get_running_loop()
+
+                def _fetch_weeks():
+                    dni, godziny, braki = {}, {}, []
+                    for i in range(weeks):
+                        monday = start + timedelta(weeks=i)
+                        try:
+                            tydzien = get_timetable(
+                                self._client, datetime(monday.year, monday.month, monday.day)
+                            )
+                            znormalizowany = normalizuj_tydzien(tydzien)
+                            dni.update(znormalizowany["dni"])
+                            godziny.update(znormalizowany["godziny"])
+                        except ParseError:
+                            for d in range(7):
+                                dni.setdefault((monday + timedelta(days=d)).isoformat(), [])
+                        except TokenError:
+                            raise
+                        except Exception as ex:
+                            _LOGGER.warning("Nie udalo sie pobrac planu tygodnia %s: %s", monday, ex)
+                            braki.append(monday.isoformat())
+                    return {"dni": dni, "godziny": godziny, "braki": braki}
+
+                wynik = await loop.run_in_executor(None, _fetch_weeks)
+                if len(wynik["braki"]) >= weeks:
+                    return None
+                return wynik
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching timetable (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get timetable after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get timetable (attempt %d/2): %s\n%s",
                     attempt + 1, ex, traceback.format_exc(),
                 )
                 self._reset_auth()
@@ -323,17 +441,59 @@ class LibrusApiClient:
             return None
 
 
+SERVICE_POBIERZ_TYDZIEN = "pobierz_tydzien"
+POBIERZ_TYDZIEN_SCHEMA = vol.Schema(
+    {
+        vol.Required("entry_id"): cv.string,
+        vol.Optional("poniedzialek"): cv.date,
+    }
+)
+
+
+async def _async_register_services(hass: HomeAssistant) -> None:
+    """Zarejestruj usluge pobierz_tydzien (raz dla calego HA)."""
+    if hass.services.has_service(DOMAIN, SERVICE_POBIERZ_TYDZIEN):
+        return
+
+    async def _handle_pobierz_tydzien(call: ServiceCall) -> ServiceResponse:
+        dane = hass.data.get(DOMAIN, {}).get(call.data["entry_id"])
+        coordinator = dane.get("coordinator") if isinstance(dane, dict) else None
+        if coordinator is None:
+            raise ServiceValidationError(
+                f"Nieznany wpis Librus: {call.data['entry_id']}"
+            )
+        return await coordinator.async_pobierz_tydzien(call.data.get("poniedzialek"))
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_POBIERZ_TYDZIEN,
+        _handle_pobierz_tydzien,
+        schema=POBIERZ_TYDZIEN_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+
 async def async_setup(hass: HomeAssistant, config: Dict[str, Any]) -> bool:
     """Set up the Librus APIX component."""
     hass.data.setdefault(DOMAIN, {})
-    
+
+    # Karta frontendowa i usluga nie moga blokowac reszty integracji
+    try:
+        await async_register_frontend(hass)
+    except Exception:  # noqa: BLE001
+        _LOGGER.warning(
+            "Nie udalo sie zarejestrowac karty librus-card; dodaj zasob recznie (patrz README): %s",
+            traceback.format_exc(),
+        )
+    await _async_register_services(hass)
+
     if DOMAIN in config:
         username = config[DOMAIN][CONF_USERNAME]
         password = config[DOMAIN][CONF_PASSWORD]
-        
+
         client = LibrusApiClient(username, password)
         hass.data[DOMAIN]["client"] = client
-        
+
         # Test authentication
         if not await client.async_authenticate():
             _LOGGER.error("Failed to authenticate")
@@ -346,28 +506,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Librus APIX from a config entry."""
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
-    
+
     client = LibrusApiClient(username, password)
-    
+
     # Test authentication
     if not await client.async_authenticate():
         _LOGGER.error("Failed to authenticate")
         return False
-    
+
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = client
-    
+    # Koordynator uzupelnia sensor.py (potrzebny usludze pobierz_tydzien)
+    hass.data[DOMAIN][entry.entry_id] = {"client": client, "coordinator": None}
+
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-    
+
     return unload_ok

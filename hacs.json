@@ -1,6 +1,6 @@
 {
   "name": "Librus Synergia HA",
   "hacs": "1.6.0",
-  "homeassistant": "2023.1.0",
+  "homeassistant": "2024.8.0",
   "country": "PL"
 }

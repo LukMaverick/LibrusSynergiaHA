@@ -37,6 +37,13 @@ def mock_librus_client():
         }
     ])
     client.async_get_messages = AsyncMock(return_value=[])
+    client.async_get_student_information = AsyncMock(return_value=None)
+    client.async_get_homework = AsyncMock(return_value=[])
+    client.async_get_homework_detail = AsyncMock(return_value=None)
+    client.async_get_schedule = AsyncMock(return_value=[])
+    client.async_get_timetable = AsyncMock(
+        return_value={"dni": {}, "godziny": {}, "braki": []}
+    )
     return client
 
 

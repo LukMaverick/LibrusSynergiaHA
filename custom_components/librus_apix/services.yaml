@@ -1,0 +1,21 @@
+pobierz_tydzien:
+  name: Pobierz tydzień
+  description: >-
+    Zwraca plan lekcji wybranego tygodnia (scalony z terminarzem i zadaniami).
+    Używana przez kartę librus-card do przełączania tygodni; dozwolone okno to
+    2 tygodnie wstecz i 4 tygodnie w przód.
+  fields:
+    entry_id:
+      name: Wpis
+      description: Identyfikator wpisu konfiguracji (atrybut entry_id sensora planu tygodnia).
+      required: true
+      example: "01JABCDEF123"
+      selector:
+        text:
+    poniedzialek:
+      name: Data
+      description: Dowolna data z żądanego tygodnia (zostanie zamieniona na poniedziałek). Domyślnie bieżący tydzień.
+      required: false
+      example: "2026-10-19"
+      selector:
+        date:

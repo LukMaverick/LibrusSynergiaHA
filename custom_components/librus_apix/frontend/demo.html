@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Librus – podgląd karty</title>
+<!--
+  Podgląd karty bez Home Assistanta. Uruchom z katalogu repozytorium:
+    python3 -m http.server 8000
+  i otwórz http://localhost:8000/custom_components/librus_apix/frontend/demo.html
+-->
+<style>
+  :root {
+    --primary-text-color: #212121;
+    --secondary-text-color: #727272;
+    --text-primary-color: #fff;
+    --card-background-color: #fff;
+    --divider-color: #e0e0e0;
+    --primary-color: #03a9f4;
+    --error-color: #db4437;
+    --warning-color: #ffa600;
+    --success-color: #43a047;
+    --ha-card-border-radius: 12px;
+    --ha-card-box-shadow: 0 2px 4px rgba(0,0,0,.08);
+    --tlo-strony: #fafafa;
+  }
+  body.ciemny {
+    --primary-text-color: #e1e1e1;
+    --secondary-text-color: #9b9b9b;
+    --card-background-color: #1c1c1c;
+    --divider-color: #3a3a3a;
+    --primary-color: #03a9f4;
+    --tlo-strony: #111111;
+    --ha-card-box-shadow: none;
+  }
+  body { margin: 0; padding: 16px; background: var(--tlo-strony); color: var(--primary-text-color);
+    font-family: Roboto, "Segoe UI", system-ui, sans-serif; }
+  .panel-demo { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 16px;
+    padding: 10px 12px; border: 1px solid var(--divider-color); border-radius: 10px; font-size: 14px; }
+  .panel-demo label { display: inline-flex; gap: 6px; align-items: center; }
+  .panel-demo select, .panel-demo input, .panel-demo button { font: inherit; }
+  .kolumna { margin: 0 auto; display: flex; flex-direction: column; gap: 22px; transition: max-width .2s; }
+  .kolumna.telefon { max-width: 375px; }
+  .kolumna.tablet { max-width: 768px; }
+  .kolumna.pelna { max-width: 1200px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color);
+    margin: 0 0 6px; font-weight: 600; }
+  code { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="panel-demo">
+  <label>Motyw <select id="motyw"><option value="jasny">jasny</option><option value="ciemny">ciemny</option></select></label>
+  <label>Szerokość <select id="szerokosc">
+    <option value="telefon">telefon (375px)</option>
+    <option value="tablet" selected>tablet (768px)</option>
+    <option value="pelna">pełna (1200px)</option>
+  </select></label>
+  <label>Symulowany dzień <select id="dzien"></select></label>
+  <label>Godzina <input id="godzina" type="time" value="10:00"></label>
+  <label><input id="blad" type="checkbox"> błąd usługi</label>
+  <label><input id="wersja" type="checkbox"> nowsza integracja</label>
+  <label><input id="numerek7" type="checkbox"> numerek = 7</label>
+</div>
+<div id="karty" class="kolumna tablet"></div>
+
+<script type="module">
+import {
+  LibrusCard, dodajDni, poniedzialekTygodnia, dataIso, dzienTygodnia, fmtData, minuty,
+} from "./librus-card.js";
+
+const DNI = ["poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela"];
+const SKROTY = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+const GODZ = {
+  0: ["07:10", "07:55"], 1: ["08:00", "08:45"], 2: ["08:55", "09:40"], 3: ["09:50", "10:35"],
+  4: ["10:45", "11:30"], 5: ["11:40", "12:25"], 6: ["12:45", "13:30"], 7: ["13:40", "14:25"], 8: ["14:35", "15:20"],
+};
+const GODZINY = Object.fromEntries(Object.entries(GODZ).map(([n, [a, b]]) => [n, `${a}–${b}`]));
+
+// Szablony planu: [numer, przedmiot, nauczyciel, sala]
+const PLANY = {
+  ola: [
+    [[1, "Matematyka", "Anna Nowak", "12"], [2, "Język polski", "Ewa Wiśniewska", "8"], [3, "Język angielski", "John Smith", "21"], [5, "Historia", "Jan Kowalski", "14"], [6, "Wychowanie fizyczne", "Piotr Zieliński", "sala gim."]],
+    [[0, "Religia", "ks. Marek", "3"], [1, "Biologia", "Maria Lis", "30"], [2, "Matematyka", "Anna Nowak", "12"], [3, "Chemia", "Olga Wróbel", "31"], [4, "Fizyka", "Adam Mazur", "32"], [5, "Język niemiecki", "Hans Müller", "22"]],
+    [[1, "Geografia", "Karol Dąb", "15"], [2, "Język polski", "Ewa Wiśniewska", "8"], [3, "Matematyka", "Anna Nowak", "12"], [4, "Informatyka", "Tomasz Bit", "40"], [6, "Zajęcia z wychowawcą", "Anna Nowak", "12"], [7, "Wiedza o społeczeństwie", "Jan Kowalski", "14"]],
+    [[1, "Język angielski", "John Smith", "21"], [2, "Muzyka", "Zofia Nuta", "5"], [3, "Plastyka", "Ola Farba", "6"], [4, "Wychowanie fizyczne", "Piotr Zieliński", "sala gim."], [5, "Edukacja dla bezpieczeństwa", "Jerzy Straż", "9"]],
+    [[1, "Matematyka", "Anna Nowak", "12"], [2, "Fizyka", "Adam Mazur", "32"], [3, "Język polski", "Ewa Wiśniewska", "8"], [4, "Historia", "Jan Kowalski", "14"]],
+  ],
+  tomek: [
+    [[1, "Edukacja wczesnoszkolna", "Beata Mała", "2"], [2, "Edukacja wczesnoszkolna", "Beata Mała", "2"], [3, "Język angielski", "John Smith", "21"], [4, "Religia", "ks. Marek", "3"]],
+    [[1, "Przyroda", "Maria Lis", "30"], [2, "Matematyka", "Beata Mała", "2"], [3, "Wychowanie fizyczne", "Piotr Zieliński", "sala gim."]],
+    [[1, "Język polski", "Beata Mała", "2"], [2, "Plastyka", "Ola Farba", "6"], [3, "Technika", "Jerzy Straż", "9"], [4, "Muzyka", "Zofia Nuta", "5"]],
+    [[2, "Matematyka", "Beata Mała", "2"], [3, "Przyroda", "Maria Lis", "30"], [4, "Wychowanie fizyczne", "Piotr Zieliński", "sala gim."]],
+    [[1, "Język polski", "Beata Mała", "2"], [2, "Język angielski", "John Smith", "21"], [3, "Informatyka", "Tomasz Bit", "40"]],
+  ],
+};
+
+const stan = { dzis: null, godzina: "10:00", blad: false, nowaWersja: false, numerek7: false };
+
+function lekcjaZ([numer, przedmiot, nauczyciel, sala]) {
+  return {
+    numer, od: GODZ[numer][0], do: GODZ[numer][1], przedmiot, nauczyciel, sala, grupy: [],
+    zastepstwo: false, odwolana: false, info: "", zmiana: {}, wydarzenia: [], sprawdzian: false, zadania: [],
+  };
+}
+
+// Dodatki zależne od tygodnia (offset względem bieżącego) – żeby nawigacja coś zmieniała
+function udekoruj(slug, offset, wd, lekcje, dzien) {
+  const ev = (typ, ikona, tytul, przedmiot = null) => ({ typ, ikona, tytul, przedmiot, href: null });
+  const r = ((offset % 3) + 3) % 3;
+  if (slug === "ola") {
+    if (wd === 2 && r === 0) {
+      const m = lekcje.find((l) => l.przedmiot === "Matematyka");
+      if (m) { m.sprawdzian = true; m.wydarzenia.push(ev("sprawdzian", "📝", "Sprawdzian: ułamki <i>dziesiętne</i>", m.przedmiot)); }
+    }
+    if (wd === 1) {
+      const c = lekcje.find((l) => l.przedmiot === "Chemia");
+      if (c && r !== 2) {
+        c.zastepstwo = true;
+        c.zmiana = { teacher_swap: ["Olga Wróbel", "Adam Mazur"], classroom_swap: ["31", "32"] };
+        c.nauczyciel = "Adam Mazur";
+        c.info = "Zastępstwo za p. Wróbel";
+      }
+    }
+    if (wd === 4) {
+      const h = lekcje.find((l) => l.przedmiot === "Historia");
+      if (h && r === 0) { h.odwolana = true; h.wydarzenia.push(ev("odwolane", "❌", "Lekcja odwołana", h.przedmiot)); }
+    }
+    if (wd === 3 && r === 1) dzien.wydarzenia_dnia.push(ev("wycieczka", "🚌", "Wycieczka do Centrum Nauki Kopernik"));
+    if (wd === 0) {
+      const a = lekcje.find((l) => l.przedmiot === "Język angielski");
+      if (a) a.wydarzenia.push(ev("kartkowka", "✏️", "Kartkówka: słówka unit 3", a.przedmiot));
+    }
+  } else {
+    if (wd === 3 && r === 0) dzien.wydarzenia_dnia.push(ev("zebranie", "👪", "Zebranie z rodzicami 17:00"));
+    if (wd === 1) {
+      const p = lekcje.find((l) => l.przedmiot === "Przyroda");
+      if (p) { p.sprawdzian = r === 1; if (p.sprawdzian) p.wydarzenia.push(ev("sprawdzian", "📝", "Sprawdzian: rośliny", p.przedmiot)); }
+    }
+  }
+}
+
+function zbudujDzien(slug, iso, offset, zadaniaWszystkie, kompakt = false) {
+  const wd = dzienTygodnia(iso);
+  const wolnyTydzien = slug === "ola" && offset === 2 && wd === 2; // np. dzień dyrektorski
+  const szablon = wd < 5 && !wolnyTydzien ? PLANY[slug][wd] : [];
+  const dzien = {
+    data: iso, dzien: DNI[wd], skrot: SKROTY[wd], liczba_lekcji: 0, zakres: "Wolne", pierwsza: null, ostatnia: null,
+    przedmioty: [], dzien_wolny: wd >= 5 || wolnyTydzien, liczba_sprawdzianow: 0, liczba_zadan: 0, wydarzenia_dnia: [], lekcje: [],
+  };
+  if (wolnyTydzien) dzien.wydarzenia_dnia.push({ typ: "dzien_wolny", ikona: "🎉", tytul: "Dzień wolny od zajęć dydaktycznych", przedmiot: null, href: null });
+  const lekcje = szablon.map(lekcjaZ);
+  udekoruj(slug, offset, wd, lekcje, dzien);
+  for (const z of zadaniaWszystkie) {
+    if (z.termin !== iso) continue;
+    const l = lekcje.find((x) => x.przedmiot === z.przedmiot);
+    if (l) l.zadania.push({ id: z.id, kategoria: z.kategoria, tresc: z.tresc, przedmiot: z.przedmiot });
+  }
+  if (kompakt) for (const l of lekcje) { delete l.nauczyciel; delete l.grupy; if (l.info) l.info = l.info.slice(0, 80); }
+  const aktywne = lekcje.filter((l) => !l.odwolana);
+  dzien.lekcje = lekcje;
+  dzien.liczba_lekcji = aktywne.length;
+  if (aktywne.length) {
+    dzien.pierwsza = Math.min(...aktywne.map((l) => l.numer));
+    dzien.ostatnia = Math.max(...aktywne.map((l) => l.numer));
+    dzien.zakres = `${GODZ[dzien.pierwsza][0]}–${GODZ[dzien.ostatnia][1]}`;
+  }
+  dzien.przedmioty = [...new Set(aktywne.map((l) => l.przedmiot))];
+  dzien.liczba_sprawdzianow = lekcje.filter((l) => l.sprawdzian).length;
+  dzien.liczba_zadan = lekcje.reduce((s, l) => s + l.zadania.length, 0);
+  return dzien;
+}
+
+function zadaniaUcznia(slug, dzis) {
+  const z = (id, przedmiot, kategoria, dni, tresc, nauczyciel = "") => {
+    const termin = dni === null ? null : dodajDni(dzis, dni);
+    const pilnosc = dni === null ? "brak_terminu" : dni < 0 ? "po_terminie" : dni === 0 ? "dzis" : dni === 1 ? "jutro" : dni <= 6 ? "tydzien" : "pozniej";
+    return { id: `${slug}-${id}`, przedmiot, kategoria, nauczyciel, termin, termin_raw: termin, dni_do: dni, pilnosc, tresc };
+  };
+  if (slug === "ola") {
+    return [
+      z(1, "Matematyka", "Zadanie domowe", 0, "Zad. 3–7 str. 45 (ułamki)"),
+      z(2, "Język polski", "Wypracowanie", 1, "Opis przeżyć wewnętrznych bohatera – min. 200 słów"),
+      z(3, "Biologia", "Projekt", 4, "Plakat: budowa komórki roślinnej <b>(A3)</b>"),
+      z(4, "Historia", "Zadanie domowe", 9, null),
+      z(5, "Język angielski", "Ćwiczenia", null, "Workbook p. 22"),
+      z(6, "Chemia", "Zadanie domowe", -2, "Uzgodnij równania reakcji 1–5"),
+    ];
+  }
+  return [
+    z(1, "Matematyka", "Karta pracy", 1, "Dodawanie do 100"),
+    z(2, "Plastyka", "Przynieś", 2, "Plastelina i farby"),
+  ];
+}
+
+function nastepnySzkolny(iso) {
+  let d = dodajDni(iso, 1);
+  while (dzienTygodnia(d) >= 5) d = dodajDni(d, 1);
+  return d;
+}
+
+function tydzien(slug, poniedzialek, kompakt) {
+  const biezacy = poniedzialekTygodnia(stan.dzis);
+  const offset = Math.round((Date.parse(poniedzialek) - Date.parse(biezacy)) / (7 * 86400000));
+  const zad = zadaniaUcznia(slug, stan.dzis);
+  const dni = [];
+  for (let i = 0; i < 7; i++) dni.push(zbudujDzien(slug, dodajDni(poniedzialek, i), offset, zad, kompakt));
+  return {
+    tydzien_od: poniedzialek, tydzien_do: dodajDni(poniedzialek, 6), numery_lekcji: [0, 1, 2, 3, 4, 5, 6, 7],
+    godziny: GODZINY, dni, nieaktualne: offset === -2,
+  };
+}
+
+function stanyUcznia(slug) {
+  const dzis = stan.dzis;
+  const zad = zadaniaUcznia(slug, dzis);
+  const dzien = zbudujDzien(slug, dzis, 0, zad);
+  const jutroIso = nastepnySzkolny(dzis);
+  const jutro = zbudujDzien(slug, jutroIso, poniedzialekTygodnia(jutroIso) === poniedzialekTygodnia(dzis) ? 0 : 1, zad);
+  const t = tydzien(slug, poniedzialekTygodnia(dzis), true);
+  const p = `sensor.librus_${slug}_`;
+
+  // następna lekcja wg symulowanej godziny
+  const teraz = minuty(stan.godzina);
+  const nast = dzien.lekcje.filter((l) => !l.odwolana && minuty(l.od) > teraz)[0];
+
+  const jutroZadania = zad.filter((z) => z.termin === jutroIso);
+  const sprawdziany = jutro.lekcje.flatMap((l) => l.wydarzenia.filter((w) => w.typ === "sprawdzian" || w.typ === "kartkowka"));
+  const otwarte = zad.filter((z) => z.pilnosc !== "po_terminie");
+
+  return {
+    [`${p}plan_dzis`]: { entity_id: `${p}plan_dzis`, state: dzien.zakres, attributes: { ...dzien, godziny: GODZINY } },
+    [`${p}plan_jutro`]: {
+      entity_id: `${p}plan_jutro`, state: jutro.zakres,
+      attributes: { ...jutro, godziny: GODZINY, czy_jutro: jutroIso === dodajDni(dzis, 1) },
+    },
+    [`${p}nastepna_lekcja`]: {
+      entity_id: `${p}nastepna_lekcja`, state: nast ? nast.przedmiot : "Koniec lekcji",
+      attributes: nast ? { numer: nast.numer, od: nast.od, do: nast.do, sala: nast.sala, nauczyciel: nast.nauczyciel, sprawdzian: nast.sprawdzian } : {},
+    },
+    [`${p}plan_tygodnia`]: {
+      entity_id: `${p}plan_tygodnia`, state: `${fmtData(t.tydzien_od)}–${fmtData(dodajDni(t.tydzien_od, 4))}`,
+      attributes: { entry_id: `entry_${slug}`, tryb: "auto", ...t, nieaktualne: false, wersja_integracji: stan.nowaWersja ? "1.3.1" : "1.3.0" },
+    },
+    [`${p}do_zrobienia_jutro`]: {
+      entity_id: `${p}do_zrobienia_jutro`, state: String(jutroZadania.length + sprawdziany.length),
+      attributes: {
+        data: jutroIso, dzien: DNI[dzienTygodnia(jutroIso)], zadania: jutroZadania,
+        sprawdziany: sprawdziany.map(({ typ, ikona, tytul, przedmiot }) => ({ typ, ikona, tytul, przedmiot })),
+        przedmioty_do_spakowania: jutro.przedmioty,
+      },
+    },
+    [`${p}zadania_otwarte`]: {
+      entity_id: `${p}zadania_otwarte`, state: String(otwarte.length),
+      attributes: {
+        zadania: otwarte, po_terminie: zad.filter((z) => z.pilnosc === "po_terminie"),
+        liczba_dzis: otwarte.filter((z) => z.pilnosc === "dzis").length,
+        liczba_jutro: otwarte.filter((z) => z.pilnosc === "jutro").length,
+        liczba_tydzien: otwarte.filter((z) => z.pilnosc === "tydzien").length,
+      },
+    },
+  };
+}
+
+function zbudujHass() {
+  return {
+    states: {
+      ...stanyUcznia("ola"),
+      ...stanyUcznia("tomek"),
+      "sensor.szczesliwy_numerek": { entity_id: "sensor.szczesliwy_numerek", state: stan.numerek7 ? "7" : "12", attributes: {} },
+    },
+    async callWS(msg) {
+      console.log("callWS", msg);
+      await new Promise((r) => setTimeout(r, 300));
+      if (stan.blad) throw new Error("Librus nie odpowiada (symulacja)");
+      if (msg.type !== "call_service" || msg.domain !== "librus_apix" || msg.service !== "pobierz_tydzien") {
+        throw new Error("nieznana usługa");
+      }
+      const slug = String(msg.service_data.entry_id).replace(/^entry_/, "");
+      return { context: {}, response: tydzien(slug, msg.service_data.poniedzialek, true) };
+    },
+  };
+}
+
+// symulowany czas dla karty
+LibrusCard.prototype._teraz = function () {
+  const [h, m] = stan.godzina.split(":").map(Number);
+  const [y, mo, d] = stan.dzis.split("-").map(Number);
+  return new Date(y, mo - 1, d, h || 0, m || 0);
+};
+
+const UCZNIOWIE = [
+  { slug: "ola", numerek: "sensor.szczesliwy_numerek", numer_w_dzienniku: 7 },
+  { slug: "tomek", nazwa: "Tomek", numerek: "sensor.szczesliwy_numerek", numer_w_dzienniku: 3 },
+];
+const KONFIGURACJE = [
+  ["dzis", { widok: "dzis", uczniowie: UCZNIOWIE }],
+  ["jutro", { widok: "jutro", uczniowie: UCZNIOWIE }],
+  ["tydzien", { widok: "tydzien", uczniowie: UCZNIOWIE, przedmioty: { Matematyka: { emoji: "🔢", kolor: "210 70% 55%" } } }],
+  ["zadania", { widok: "zadania", uczniowie: UCZNIOWIE }],
+  ["plecak", { widok: "plecak", uczniowie: UCZNIOWIE }],
+  ["brak encji (zły slug)", { widok: "tydzien", slug: "kasia" }],
+];
+
+const karty = [];
+const kontener = document.getElementById("karty");
+for (const [tytul, cfg] of KONFIGURACJE) {
+  const sekcja = document.createElement("section");
+  const h = document.createElement("h2");
+  h.textContent = `widok: ${tytul}`;
+  const karta = document.createElement("librus-card");
+  karta.setConfig({ type: "custom:librus-card", ...cfg });
+  sekcja.append(h, karta);
+  kontener.append(sekcja);
+  karty.push(karta);
+}
+
+function odswiez() {
+  const hass = zbudujHass();
+  for (const k of karty) k.hass = hass;
+}
+
+// wybór symulowanego dnia: rzeczywisty + Pn–Pt bieżącego tygodnia
+const dzisRzecz = dataIso(new Date());
+const pon = poniedzialekTygodnia(dzisRzecz);
+const sel = document.getElementById("dzien");
+const opcje = [[dzisRzecz, `dziś (${fmtData(dzisRzecz)})`], ...[0, 1, 2, 3, 4].map((i) => [dodajDni(pon, i), `${DNI[i]} ${fmtData(dodajDni(pon, i))}`])];
+for (const [v, t] of opcje) sel.add(new Option(t, v));
+stan.dzis = dzienTygodnia(dzisRzecz) >= 5 ? dodajDni(pon, 2) : dzisRzecz; // w weekend domyślnie środa
+sel.value = stan.dzis;
+
+sel.addEventListener("change", () => { stan.dzis = sel.value; odswiez(); });
+document.getElementById("godzina").addEventListener("change", (e) => { stan.godzina = e.target.value || "10:00"; for (const k of karty) k._render(); odswiez(); });
+document.getElementById("blad").addEventListener("change", (e) => { stan.blad = e.target.checked; });
+document.getElementById("wersja").addEventListener("change", (e) => { stan.nowaWersja = e.target.checked; odswiez(); });
+document.getElementById("numerek7").addEventListener("change", (e) => { stan.numerek7 = e.target.checked; odswiez(); });
+document.getElementById("motyw").addEventListener("change", (e) => document.body.classList.toggle("ciemny", e.target.value === "ciemny"));
+document.getElementById("szerokosc").addEventListener("change", (e) => { kontener.className = `kolumna ${e.target.value}`; });
+
+odswiez();
+</script>
+</body>
+</html>

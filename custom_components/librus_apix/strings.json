@@ -17,5 +17,21 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "services": {
+    "pobierz_tydzien": {
+      "name": "Pobierz tydzień",
+      "description": "Zwraca plan lekcji wybranego tygodnia scalony z terminarzem i zadaniami (używane przez kartę librus-card). Dozwolone okno: 2 tygodnie wstecz i 4 w przód.",
+      "fields": {
+        "entry_id": {
+          "name": "Wpis",
+          "description": "Identyfikator wpisu konfiguracji (atrybut entry_id sensora planu tygodnia)."
+        },
+        "poniedzialek": {
+          "name": "Data",
+          "description": "Dowolna data z żądanego tygodnia; domyślnie bieżący tydzień."
+        }
+      }
+    }
   }
 }

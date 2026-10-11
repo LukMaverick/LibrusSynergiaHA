@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install pytest voluptuous "librus-apix>=1.5.2"
+      # Testy logiki (plan, scalanie, zadania, koordynator, klient, karta) dzialaja z atrapami HA
+      - name: Run tests
+        run: pytest -q tests --ignore=tests/test_init.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run card tests
+        run: node --test "tests/frontend/*.test.mjs"

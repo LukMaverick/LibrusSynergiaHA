@@ -1,0 +1,7 @@
+[
+  {"subject": "Matematyka", "category": "Zadanie domowe", "teacher": "Jan Kowalski", "lesson": "1", "task_date": "2026-10-09 08:00", "completion_date": "2026-10-14 23:59", "href": "z1"},
+  {"subject": "Matematyka", "category": "Zadanie domowe", "teacher": "Jan Kowalski", "lesson": "2", "task_date": "2026-10-09 08:00", "completion_date": "2026-10-14 23:59", "href": "z2"},
+  {"subject": "Język angielski", "category": "Praca klasowa", "teacher": "Anna Nowak", "lesson": "3", "task_date": "12.10.2026", "completion_date": "16.10.2026", "href": ""},
+  {"subject": "Historia", "category": "Zadanie domowe", "teacher": "Ewa Lis", "lesson": "4", "task_date": "x", "completion_date": "brak", "href": "z4"},
+  {"subject": "Geografia", "category": "Zadanie domowe", "teacher": "Piotr Zet", "lesson": "5", "task_date": "2026-10-01", "completion_date": "2026-10-08", "href": "z5"}
+]

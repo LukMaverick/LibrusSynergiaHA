@@ -10,7 +10,8 @@ Integracja Home Assistant z systemem Librus Synergia, umożliwiająca monitorowa
 - 📈 **Statystyki** - średnie ocen, liczba ocen, trend
 - 📧 **Wiadomości** - najnowsze wiadomości z dziennika
 - 🔔 **Powiadomienia** - automatyczne powiadomienia o nowych ocenach/wiadomościach
-- 🏠 **Dashboard** - piękne karty w Home Assistant
+- 📅 **Plan lekcji** - plan na dziś i jutro, widok tygodnia ze sprawdzianami, zadaniami i zastępstwami
+- 🏠 **Dashboard dla dzieci** - własna karta `custom:librus-card` (wbudowana w integrację)
 
 ## 🚀 Sensory
 
@@ -18,15 +19,117 @@ Integracja tworzy następujące sensory:
 
 | Sensor | Opis | Wartość |
 |--------|------|---------|
-| `sensor.librus_uczen` | Informacje o uczniu (klasa, wychowawca, szkoła) | imię i nazwisko |
-| `sensor.librus_szczesliwy_numerek` | Szczęśliwy numerek dnia | numer |
-| `sensor.librus_oceny` | Wszystkie oceny bieżącego semestru | liczba ocen |
-| `sensor.librus_srednia_ocen` | **Globalna średnia** ze wszystkich przedmiotów | float (wykres 📈) |
-| `sensor.librus_wiadomosci` | Ostatnie 5 wiadomości z pełną treścią | liczba nieprzeczytanych |
-| `sensor.librus_<przedmiot>` | Oceny z danego przedmiotu (np. `sensor.librus_matematyka`) | lista ocen: "4, 3+, 5" |
-| `sensor.librus_srednia_<przedmiot>` | **Średnia** z danego przedmiotu (np. `sensor.librus_srednia_matematyka`) | float (wykres 📈) |
+| `sensor.informacje_o_uczniu` | Informacje o uczniu (klasa, wychowawca, szkoła) | imię i nazwisko |
+| `sensor.szczesliwy_numerek` | Szczęśliwy numerek dnia | numer |
+| `sensor.oceny` | Wszystkie oceny bieżącego semestru | liczba ocen |
+| `sensor.srednia_ocen` | **Globalna średnia** ze wszystkich przedmiotów | float (wykres 📈) |
+| `sensor.wiadomosci` | Ostatnie wiadomości (temat i nadawca) | liczba nieprzeczytanych |
+| `sensor.terminarz` | Nadchodzące zdarzenia z terminarza | liczba zdarzeń |
+| `sensor.zadania` | Zadania domowe (bez przeterminowanych) | liczba zadań |
+| `sensor.<przedmiot>` | Oceny z danego przedmiotu (np. `sensor.matematyka`) | lista ocen: "4, 3+, 5" |
+| `sensor.srednia_<przedmiot>` | **Średnia** z danego przedmiotu (np. `sensor.srednia_matematyka`) | float (wykres 📈) |
+
+> Identyfikatory powstają z nazw encji. Jeśli Twoje wyglądają inaczej, sprawdź je w **Narzędzia deweloperskie → Stany**.
+
+### 📅 Plan lekcji i zadania (od v1.3.0)
+
+Te sensory mają stałe, przewidywalne identyfikatory: `sensor.librus_<imię>_...`, gdzie `<imię>` to imię ucznia (np. `ola`). Dla drugiego dziecka (osobny wpis integracji) wystarczy zmienić imię.
+
+| Sensor | Stan | Najważniejsze atrybuty |
+|--------|------|------------------------|
+| `sensor.librus_<imię>_plan_dzis` | zakres godzin ("08:00–14:30") albo "Wolne" | `lekcje`, `przedmioty`, `liczba_sprawdzianow`, `wydarzenia_dnia`, `dzien_wolny` |
+| `sensor.librus_<imię>_plan_jutro` | jak wyżej, dla najbliższego dnia nauki (w piątek poniedziałek) | j.w. oraz `data`, `dzien`, `czy_jutro` |
+| `sensor.librus_<imię>_nastepna_lekcja` | przedmiot trwającej lub najbliższej lekcji, "Koniec lekcji", "Brak lekcji" | `od`, `do`, `sala`, `nauczyciel`, `trwa`, `sprawdzian` |
+| `sensor.librus_<imię>_plan_tygodnia` | zakres dat ("12.10–18.10") | `dni`, `numery_lekcji`, `godziny`, `entry_id` |
+| `sensor.librus_<imię>_do_zrobienia_jutro` | liczba zadań i sprawdzianów | `zadania`, `sprawdziany`, `przedmioty_do_spakowania`, `data` |
+| `sensor.librus_<imię>_zadania_otwarte` | liczba zadań od dziś | `zadania` (z `pilnosc`, `tresc`), `liczba_dzis`, `liczba_jutro`, `po_terminie` |
+
+`plan_tygodnia` domyślnie pokazuje najbliższy tydzień nauki: w sobotę, niedzielę i w piątek po ostatniej lekcji jest to **następny** tydzień, więc dziecko może przygotować się na cały tydzień. Plan jest scalony z terminarzem i zadaniami: lekcje mają znaczniki 📝 sprawdzian, 🏠 zadanie, ⚠ zastępstwo i ❌ odwołanie, a wycieczki, rady i dni wolne trafiają do `wydarzenia_dnia`.
 
 Sensory średnich mają `state_class: measurement` — HA automatycznie rysuje dla nich wykres historyczny po kliknięciu w encję.
+
+## 🧒 Karta `librus-card` – dashboard dla dzieci
+
+Razem z integracją instaluje się własna karta Lovelace (bez dodatkowej instalacji z HACS). Integracja sama dodaje ją do zasobów dashboardów (tryb *storage*); po aktualizacji odśwież stronę (Ctrl+Shift+R). W trybie YAML karta ładuje się automatycznie przez `add_extra_js_url`. Jeśli wolisz zasób ręcznie: `url: /librus_apix_static/librus-card.js`, `type: module`.
+
+Karta ma pięć widoków (`widok:`): `dzis`, `jutro`, `tydzien`, `zadania` (do odrobienia, z kolorami pilności) i `plecak` (przedmioty do spakowania + zadania i sprawdziany na jutro). Tydzień ma strzałki ◀ Teraz ▶ (od 2 tygodni wstecz do 4 w przód) i pokazuje cały nadchodzący tydzień w weekend.
+
+```yaml
+type: custom:librus-card
+widok: tydzien
+slug: ola              # imię ucznia z identyfikatorów sensor.librus_ola_*
+```
+
+Kilkoro dzieci w jednej karcie (chipy z przełącznikiem, wybór jest zapamiętany na urządzeniu):
+
+```yaml
+type: custom:librus-card
+widok: dzis
+uczniowie:
+  - slug: ola
+    nazwa: Ola
+    numerek: sensor.szczesliwy_numerek   # opcjonalnie
+    numer_w_dzienniku: 7                  # opcjonalnie: podświetla szczęśliwy numerek
+  - slug: tomek
+przedmioty:                               # opcjonalne nadpisania wyglądu
+  Matematyka: { emoji: "🔢", kolor: "210 70% 55%" }
+```
+
+Podgląd karty bez Home Assistanta: uruchom `python3 -m http.server` w katalogu repo i otwórz `/custom_components/librus_apix/frontend/demo.html`.
+
+### Usługa `librus_apix.pobierz_tydzien`
+
+Karta używa jej do przełączania tygodni; możesz jej też użyć w automatyzacjach (`entry_id` jest atrybutem sensora `plan_tygodnia`). Zwraca plan tygodnia scalony z terminarzem i zadaniami. Bieżący i następny tydzień pochodzą z danych integracji, pozostałe są pobierane z Librusa i trzymane w pamięci przez godzinę.
+
+### Plan awaryjny bez karty (markdown)
+
+```yaml
+type: markdown
+content: >
+  {% set s = 'sensor.librus_ola_plan_tygodnia' %}
+  {% set dni = state_attr(s, 'dni') or [] %}
+  ### 📅 {{ states(s) }}
+  | Nr |{% for d in dni[:5] %} {{ d.skrot }} {{ d.data[8:] }}.{{ d.data[5:7] }}{{ ' 🎉' if d.dzien_wolny }} |{% endfor %}
+  |---|{% for d in dni[:5] %}---|{% endfor %}
+  {% for n in state_attr(s, 'numery_lekcji') or [] -%}
+  | **{{ n }}** |{% for d in dni[:5] -%}
+  {%- set l = d.lekcje | selectattr('numer', 'eq', n) | list | first | default(none) -%}
+  {%- if l %} {{ '~~' if l.odwolana }}{{ l.przedmiot[:12] }}{{ '~~ ❌' if l.odwolana }}{{ ' ⚠' if l.zastepstwo }}{{ ' 📝' if l.sprawdzian }}{{ ' 🏠' if l.zadania }}{% endif %} |
+  {%- endfor %}
+  {% endfor %}
+```
+
+### Prywatność
+
+`visible: - user: <id dziecka>` w widoku dashboardu ukrywa tylko zakładkę i **nie jest kontrolą dostępu**: konto dziecka mające dostęp do HA może odczytać wszystkie encje (także wiadomości) przez narzędzia deweloperskie lub API. Nie umieszczaj wiadomości na dashboardzie dziecka, a jeśli to ważne, ogranicz uprawnienia konta dziecka.
+
+### Automatyzacje: plecak i zmiany w planie
+
+```yaml
+automation:
+  - alias: "Librus: spakuj się na jutro"
+    trigger:
+      - platform: time
+        at: "19:00:00"
+    condition:
+      - condition: template
+        value_template: "{{ states('sensor.librus_ola_plan_jutro') != 'Wolne' }}"
+    action:
+      - service: notify.mobile_app_telefon_oli
+        data:
+          title: "Plecak na jutro 🎒"
+          message: >
+            {% set d = 'sensor.librus_ola_do_zrobienia_jutro' %}
+            Przedmioty: {{ state_attr(d, 'przedmioty_do_spakowania') | join(', ') }}.
+            {% for z in state_attr(d, 'zadania') %}
+            🏠 {{ z.przedmiot }}{{ ': ' ~ z.tresc if z.tresc }}
+            {% endfor %}
+            {% for s in state_attr(d, 'sprawdziany') %}
+            📝 {{ s.tytul }} {{ s.przedmiot }}
+            {% endfor %}
+```
+
+Zdarzenie `librus_apix_nowe_zadanie` zawiera teraz także `id`, `termin_iso`, `dni_do`, `pilnosc`, `tresc` i `dzien_tygodnia_terminu` (dotychczasowe pola bez zmian).
 
 ## 📦 Instalacja
 
@@ -86,11 +189,11 @@ docker-compose up -d
 type: entities
 title: "📚 Oceny Librus"
 entities:
-  - entity: sensor.librus_srednia_ocen
+  - entity: sensor.srednia_ocen
     name: "Globalna średnia"
-  - entity: sensor.librus_oceny
+  - entity: sensor.oceny
     name: "Liczba ocen"
-  - entity: sensor.librus_szczesliwy_numerek
+  - entity: sensor.szczesliwy_numerek
     name: "Szczęśliwy numerek"
 ```
 
@@ -187,7 +290,7 @@ Legenda ikon:
 type: markdown
 title: 📅 Terminarz
 content: >
-  {% set zdarzenia = state_attr('sensor.librus_imie_nazwisko_terminarz',
+  {% set zdarzenia = state_attr('sensor.terminarz',
   'zdarzenia') %} {% if zdarzenia %} | Data | Dzień | Typ | Przedmiot | Opis |
    |------|-------|-----|-----------|------|
   {% for z in zdarzenia %} | **{{ z.data }}** | {{ z.tydzien }} | {{ z.tytul }}
@@ -203,7 +306,7 @@ content: >
 type: markdown
 title: 📝 Sprawdziany i klasówki
 content: >
-  {% set zdarzenia = state_attr('sensor.librus_imie_nazwisko_terminarz',
+  {% set zdarzenia = state_attr('sensor.terminarz',
   'zdarzenia') %} {% set typy_testow = ['Sprawdzian', 'Kartkówka', 'Klasówka',
   'Praca klasowa'] %} {% set sprawdziany = zdarzenia | selectattr('tytul', 'in',
   typy_testow) | list %} {% if sprawdziany %} | Data | Dzień | Typ | Przedmiot |
@@ -219,7 +322,7 @@ content: >
 ### Wykres średniej z przedmiotu (Gauge)
 ```yaml
 type: gauge
-entity: sensor.librus_srednia_matematyka
+entity: sensor.srednia_matematyka
 name: "Matematyka - średnia"
 min: 1
 max: 6
