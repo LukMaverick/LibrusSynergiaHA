@@ -14,7 +14,14 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import (
+    CONF_FETCH_MESSAGE_CONTENT,
+    DEFAULT_FETCH_MESSAGE_CONTENT,
+    DOMAIN,
+    MESSAGE_CONTENT_MAX_CHARS,
+    MESSAGES_WITH_CONTENT,
+    SCAN_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +65,22 @@ def _srednia_ocen(oceny: List[Dict]) -> Optional[float]:
     return round(sum(wartosci) / len(wartosci), 2) if wartosci else None
 
 
+def _przytnij_tresc(text: Optional[str]) -> str:
+    """Uporzadkuj tresc wiadomosci: usun nadmiar pustych linii i przytnij do limitu."""
+    if not text:
+        return ""
+    lines = [line.rstrip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    out: List[str] = []
+    for line in lines:
+        if not line and (not out or not out[-1]):
+            continue
+        out.append(line)
+    cleaned = "\n".join(out).strip()
+    if len(cleaned) > MESSAGE_CONTENT_MAX_CHARS:
+        cleaned = cleaned[: MESSAGE_CONTENT_MAX_CHARS - 1].rstrip() + "…"
+    return cleaned
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -66,7 +89,7 @@ async def async_setup_entry(
     """Konfiguracja platformy czujnikow Librus APIX."""
     client = hass.data[DOMAIN][config_entry.entry_id]
 
-    coordinator = LibrusDataUpdateCoordinator(hass, client)
+    coordinator = LibrusDataUpdateCoordinator(hass, client, config_entry)
     await coordinator.async_config_entry_first_refresh()
 
     entities: List[SensorEntity] = [
@@ -98,9 +121,14 @@ EVENT_NOWE_ZDARZENIE = f"{DOMAIN}_nowe_zdarzenie"
 class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
     """Klasa zarzadzajaca pobieraniem danych z Librus."""
 
-    def __init__(self, hass: HomeAssistant, client: Any) -> None:
+    def __init__(
+        self, hass: HomeAssistant, client: Any, config_entry: Optional[ConfigEntry] = None
+    ) -> None:
         """Inicjalizacja koordynatora."""
         self.client = client
+        self._entry = config_entry
+        # href -> tresc; kazda wiadomosc pobierana tylko raz (pobranie oznacza ja jako przeczytana)
+        self._message_content: Dict[str, str] = {}
         self._seen_message_hrefs: set = set()
         self._seen_grade_ids: set = set()
         self._seen_homework_ids: set = set()
@@ -122,6 +150,8 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
             student_info = await self.client.async_get_student_information()
             grades = await self.client.async_get_grades()
             messages = await self.client.async_get_messages(count=10)
+            if messages is not None and self._fetch_message_content:
+                await self._attach_message_content(messages)
             homework_raw = await self.client.async_get_homework()
             schedule_raw = await self.client.async_get_schedule()
 
@@ -210,6 +240,38 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Blad komunikacji z API: {err}") from err
 
+    @property
+    def _fetch_message_content(self) -> bool:
+        """Czy uzytkownik wlaczyl pobieranie tresci wiadomosci (Options Flow)."""
+        if self._entry is None:
+            return False
+        return bool(
+            self._entry.options.get(
+                CONF_FETCH_MESSAGE_CONTENT, DEFAULT_FETCH_MESSAGE_CONTENT
+            )
+        )
+
+    async def _attach_message_content(self, messages: List[Dict]) -> None:
+        """Dolacz tresc do najnowszych wiadomosci.
+
+        Pobiera tylko wiadomosci, ktorych tresci jeszcze nie ma w pamieci, wiec kazda
+        wiadomosc jest otwierana w Librusie raz. Otwarcie oznacza ja jako przeczytana.
+        """
+        for msg in messages[:MESSAGES_WITH_CONTENT]:
+            href = msg.get("href", "")
+            if not href:
+                continue
+            if href not in self._message_content:
+                content = await self.client.async_get_message_content(href)
+                if content is None:
+                    continue
+                self._message_content[href] = _przytnij_tresc(content)
+            msg["content"] = self._message_content[href]
+        aktualne = {m.get("href") for m in messages}
+        for href in list(self._message_content):
+            if href not in aktualne:
+                del self._message_content[href]
+
     def _fire_events(self, messages: List[Dict], grades: List[Dict]) -> None:
         """Wyslij zdarzenia HA dla nowych wiadomosci i ocen."""
         for msg in messages:
@@ -224,6 +286,7 @@ class LibrusDataUpdateCoordinator(DataUpdateCoordinator):
                         "temat": msg.get("title", ""),
                         "data": msg.get("date", ""),
                         "ma_zalacznik": msg.get("has_attachment", False),
+                        **({"tresc": msg["content"]} if "content" in msg else {}),
                     },
                 )
 
@@ -624,7 +687,7 @@ class LibrusZadaniaSensor(CoordinatorEntity, SensorEntity):
 
 
 class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
-    """Czujnik z wiadomosciami (temat i nadawca, bez pobierania tresci)."""
+    """Czujnik z wiadomosciami (temat i nadawca; tresc tylko po wlaczeniu opcji)."""
 
     def __init__(self, coordinator: LibrusDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         """Inicjalizacja."""
@@ -657,6 +720,7 @@ class LibrusWiadomosciSensor(CoordinatorEntity, SensorEntity):
                     "nieprzeczytana": m.get("unread", False),
                     "jest_nowa": m.get("jest_nowa", False),
                     "ma_zalacznik": m.get("has_attachment", False),
+                    **({"tresc": m["content"]} if "content" in m else {}),
                 }
                 for m in msgs
             ],

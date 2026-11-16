@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfiguracja Librus APIX",
+        "description": "Podaj dane logowania do Librus Synergia",
+        "data": {
+          "username": "Login",
+          "password": "Hasło"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z Librusem. Sprawdź dane logowania.",
+      "unknown": "Nieoczekiwany błąd"
+    },
+    "abort": {
+      "already_configured": "To konto jest już skonfigurowane"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Librus APIX",
+        "description": "Pobieranie treści otwiera każdą nową wiadomość w Librus Synergia, co OZNACZA JĄ TAM JAKO PRZECZYTANĄ (także dla ucznia/rodzica w aplikacji). Pobieranych jest tylko 5 najnowszych wiadomości, każda jeden raz.",
+        "data": {
+          "fetch_message_content": "Pobieraj treść wiadomości (oznacza je w Librusie jako przeczytane)"
+        }
+      }
+    }
+  }
+}

@@ -17,5 +17,16 @@
     "abort": {
       "already_configured": "Device is already configured"
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Librus APIX options",
+        "description": "Fetching message content opens each new message in Librus Synergia, which MARKS IT AS READ there (also for the student/parent in the app). Only the 5 newest messages are fetched, each once.",
+        "data": {
+          "fetch_message_content": "Fetch message content (marks messages as read in Librus)"
+        }
+      }
+    }
   }
 }

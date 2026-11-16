@@ -203,6 +203,44 @@ class LibrusApiClient:
                 if attempt == 1:
                     return None
 
+    async def async_get_message_content(self, href: str):
+        """Get the body of one message.
+
+        UWAGA: otwarcie wiadomosci w Librus Synergia oznacza ja jako przeczytana.
+        Wywolywane tylko, gdy uzytkownik wlaczyl opcje pobierania tresci.
+        """
+        for attempt in range(2):
+            try:
+                if not self._client or not self._token:
+                    if not await self.async_authenticate():
+                        return None
+
+                from librus_apix.messages import message_content
+
+                loop = asyncio.get_running_loop()
+                data = await loop.run_in_executor(
+                    None, message_content, self._client, href
+                )
+                return data.content if data is not None else None
+
+            except TokenError:
+                _LOGGER.warning(
+                    "Token expired fetching message content (attempt %d/2), re-authenticating...",
+                    attempt + 1,
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    _LOGGER.error("Failed to get message content after re-authentication.")
+                    return None
+            except Exception as ex:
+                _LOGGER.error(
+                    "Failed to get message content (attempt %d/2): %s\n%s",
+                    attempt + 1, ex, traceback.format_exc(),
+                )
+                self._reset_auth()
+                if attempt == 1:
+                    return None
+
     async def async_get_homework(self):
         """Get upcoming homework assignments from Librus (next 30 days)."""
         for attempt in range(2):
@@ -359,8 +397,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
+    # Przeladuj integracje po zmianie opcji
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
