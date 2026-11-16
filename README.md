@@ -22,7 +22,7 @@ Integracja tworzy następujące sensory:
 | `sensor.librus_szczesliwy_numerek` | Szczęśliwy numerek dnia | numer |
 | `sensor.librus_oceny` | Wszystkie oceny bieżącego semestru | liczba ocen |
 | `sensor.librus_srednia_ocen` | **Globalna średnia** ze wszystkich przedmiotów | float (wykres 📈) |
-| `sensor.librus_wiadomosci` | Ostatnie 5 wiadomości z pełną treścią | liczba nieprzeczytanych |
+| `sensor.librus_wiadomosci` | Ostatnie 5 wiadomości (temat, nadawca, data; treść po włączeniu opcji — patrz niżej) | liczba nieprzeczytanych |
 | `sensor.librus_<przedmiot>` | Oceny z danego przedmiotu (np. `sensor.librus_matematyka`) | lista ocen: "4, 3+, 5" |
 | `sensor.librus_srednia_<przedmiot>` | **Średnia** z danego przedmiotu (np. `sensor.librus_srednia_matematyka`) | float (wykres 📈) |
 
@@ -66,6 +66,18 @@ Lub ręcznie:
    - **Login/Username**: Twój login do Librus
    - **Hasło**: Twoje hasło do Librus
 4. Kliknij **"Prześlij"**
+
+### Opcja: treść wiadomości
+
+Domyślnie integracja pobiera tylko listę wiadomości (temat, nadawca, data), bo **otwarcie wiadomości w Librus Synergia oznacza ją jako przeczytaną**.
+Jeśli chcesz mieć treść w Home Assistant (np. do powiadomień albo podsumowań), włącz ją:
+
+**Ustawienia → Urządzenia i usługi → Librus APIX → Konfiguruj → „Pobieraj treść wiadomości”**
+
+- Treść trafia do atrybutu `tresc` każdej z 5 wiadomości w `sensor.librus_<uczeń>_wiadomosci` oraz do danych zdarzenia `librus_apix_nowa_wiadomosc`.
+- Pobierane jest tylko 5 najnowszych wiadomości, **każda jeden raz** (treść jest trzymana w pamięci do restartu HA). Po restarcie te same wiadomości zostaną pobrane ponownie, ale są już przeczytane.
+- ⚠️ Pobrane wiadomości będą oznaczone w Librusie jako przeczytane — także dla ucznia/rodzica w aplikacji i na stronie. Status `nieprzeczytana` w sensorze zmieni się przy następnym odświeżeniu.
+- Treść jest przycinana do 2000 znaków (limit rozmiaru atrybutów HA).
 
 ## 🔧 Środowisko testowe
 
@@ -239,9 +251,9 @@ Zdarzenia są wykrywane przy każdym odświeżeniu (co 2h). Pierwsze uruchomieni
 ### 📬 Powiadomienie o nowej wiadomości
 
 Zdarzenie: `librus_apix_nowa_wiadomosc`  
-Dostępne dane: `nadawca`, `temat`, `data`, `ma_zalacznik`
+Dostępne dane: `nadawca`, `temat`, `data`, `ma_zalacznik`, a przy włączonej opcji [treści wiadomości](#opcja-treść-wiadomości) także `tresc`.
 
-> **Uwaga:** Treść wiadomości nie jest pobierana celowo — aby nie oznaczać wiadomości jako przeczytanych w Librusie.
+> **Uwaga:** Domyślnie treść wiadomości nie jest pobierana — aby nie oznaczać wiadomości jako przeczytanych w Librusie.
 
 ```yaml
 automation:
